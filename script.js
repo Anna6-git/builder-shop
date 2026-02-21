@@ -1,19 +1,33 @@
+"use strict";
+
+/* =========================
+   CONFIG + STORAGE KEYS
+========================= */
 const API_BASE = window.API_BASE || "http://localhost:3001";
+
 const KEY_CATS = "categories_db";
 const KEY_PRODS = "products_db";
 const KEY_CART = "cart_v2";
 
-/* AUTH keys */
+/* AUTH keys (покупці — локально) */
 const KEY_USERS = "users_db";
 const KEY_SESSION = "current_user";
 
-/* ===== Seed data if empty ===== */
+/* =========================
+   SEED + MIGRATION
+========================= */
 function seedIfEmpty() {
   const catsRaw = localStorage.getItem(KEY_CATS);
   const prodsRaw = localStorage.getItem(KEY_PRODS);
 
-  if (!catsRaw) {
-    const cats = [
+  let cats = [];
+  let prods = [];
+
+  try { cats = catsRaw ? JSON.parse(catsRaw) : []; } catch { cats = []; }
+  try { prods = prodsRaw ? JSON.parse(prodsRaw) : []; } catch { prods = []; }
+
+  if (!Array.isArray(cats) || cats.length === 0) {
+    cats = [
       { id: 1, name: "Гіпсокартон", icon: "🧱", order: 1 },
       { id: 2, name: "Профіль для гіпсокартону", icon: "📐", order: 2 },
       { id: 3, name: "Будівельні суміші", icon: "🪣", order: 3 },
@@ -22,9 +36,9 @@ function seedIfEmpty() {
     localStorage.setItem(KEY_CATS, JSON.stringify(cats));
   }
 
-  if (!prodsRaw) {
-    // ВАЖЛИВО: тепер замість stock:true/false ми використовуємо stockQty (кількість)
-    const prods = [
+  if (!Array.isArray(prods) || prods.length === 0) {
+    // ВАЖЛИВО: stockQty (кількість)
+    prods = [
       { id: 101, title: "Гіпсокартон 12.5 мм, 1.2×2.5 м", catId: 1, brand: "Knauf", price: 265, img: "assets/img/gk.jpg", unitType: "pcs", stockQty: 20 },
       { id: 102, title: "Профіль CD 60/27, 3 м", catId: 2, brand: "Rigips", price: 120, img: "assets/img/profil.jpg", unitType: "length", stockQty: 80 },
       { id: 103, title: "Цемент 25 кг", catId: 3, brand: "Knauf", price: 210, img: "assets/img/cement.jpg", unitType: "weight", stockQty: 200 },
@@ -34,17 +48,12 @@ function seedIfEmpty() {
   }
 }
 
-/* ===== Migration: якщо раніше було stock:true/false ===== */
 function migrateProductsIfNeeded() {
   const raw = localStorage.getItem(KEY_PRODS);
   if (!raw) return;
 
   let list;
-  try {
-    list = JSON.parse(raw);
-  } catch {
-    return;
-  }
+  try { list = JSON.parse(raw); } catch { return; }
   if (!Array.isArray(list)) return;
 
   let changed = false;
@@ -52,13 +61,13 @@ function migrateProductsIfNeeded() {
   const fixed = list.map((p) => {
     const obj = { ...p };
 
-    // якщо старий формат stock (boolean) і немає stockQty
+    // якщо старий формат stock:boolean і немає stockQty
     if (typeof obj.stockQty === "undefined" && typeof obj.stock === "boolean") {
-      obj.stockQty = obj.stock ? 10 : 0; // дефолтно 10, якщо було "в наявності"
+      obj.stockQty = obj.stock ? 10 : 0;
       changed = true;
     }
 
-    // якщо stockQty є, але некоректний
+    // нормалізація stockQty
     if (typeof obj.stockQty !== "undefined") {
       const n = Number(obj.stockQty);
       if (!Number.isFinite(n) || n < 0) {
@@ -73,7 +82,9 @@ function migrateProductsIfNeeded() {
   if (changed) localStorage.setItem(KEY_PRODS, JSON.stringify(fixed));
 }
 
-/* ===== Storage helpers ===== */
+/* =========================
+   STORAGE HELPERS
+========================= */
 function getCats() {
   return JSON.parse(localStorage.getItem(KEY_CATS) || "[]");
 }
@@ -97,7 +108,9 @@ function cartUniqueProductsCount() {
   return ids.size;
 }
 
-/* ===== Utils ===== */
+/* =========================
+   UTILS
+========================= */
 function normalizeQuery(s) {
   return (s || "").trim().toLowerCase();
 }
@@ -110,7 +123,7 @@ function unitsFor(unitType) {
   return ["шт"];
 }
 function catById(cats, id) {
-  return cats.find((c) => c.id === id);
+  return cats.find((c) => Number(c.id) === Number(id));
 }
 function escapeHTML(str) {
   return String(str)
@@ -132,7 +145,9 @@ function round1(x) {
   return Math.round(Number(x) * 10) / 10;
 }
 
-/* ===== Header settings ===== */
+/* =========================
+   HEADER SETTINGS
+========================= */
 function applyHeaderSettings() {
   const siteTitle = document.getElementById("siteTitle");
   if (siteTitle) siteTitle.textContent = "БудМаркет Радомишль";
@@ -152,7 +167,9 @@ function applyHeaderSettings() {
   if (wt) wt.textContent = "Пн–Сб 09:00–17:00 • Нд вихідний";
 }
 
-/* ===== UI elements ===== */
+/* =========================
+   UI ELEMENTS
+========================= */
 const cartCountEl = document.getElementById("cartCount");
 
 const productsSection = document.getElementById("productsSection");
@@ -195,13 +212,15 @@ const nextSlideBtn = document.getElementById("nextSlide");
 let activeCatId = null;
 let currentProduct = null;
 
-/* ===== Left catalog ===== */
+/* =========================
+   LEFT CATALOG
+========================= */
 function renderLeftCatalog(cats) {
   if (!catalogNav) return;
   catalogNav.innerHTML = "";
 
   if (!cats.length) {
-    catalogNav.innerHTML = `<div class="hint" style="padding:10px 14px;">Немає категорій. Додайте їх в admin.html</div>`;
+    catalogNav.innerHTML = `<div class="hint" style="padding:10px 14px;">Немає категорій.</div>`;
     return;
   }
 
@@ -226,7 +245,9 @@ function renderCatalog() {
   renderLeftCatalog(cats);
 }
 
-/* ===== Filters ===== */
+/* =========================
+   FILTERS
+========================= */
 function renderFilterCheckboxes(container, values, prefix) {
   if (!container) return;
   container.innerHTML = "";
@@ -276,7 +297,9 @@ function applyFiltersToList(list) {
   });
 }
 
-/* ===== Products ===== */
+/* =========================
+   PRODUCTS
+========================= */
 function renderProducts(list, titleText) {
   if (productsTitle) productsTitle.textContent = titleText;
   if (!prodGrid) return;
@@ -317,7 +340,7 @@ function openCategory(catId) {
 
   const cats = getCats();
   const c = catById(cats, catId);
-  const list = getProds().filter((p) => p.catId === catId);
+  const list = getProds().filter((p) => Number(p.catId) === Number(catId));
 
   resetFiltersUI(list);
   renderProducts(list, c ? c.name : "Товари");
@@ -331,7 +354,9 @@ function backToCatalog() {
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
-/* ===== Live search ===== */
+/* =========================
+   LIVE SEARCH
+========================= */
 function findProductsByQuery(q) {
   const query = normalizeQuery(q);
   if (!query) return [];
@@ -369,13 +394,17 @@ function showSuggestions(items) {
   });
 }
 
-/* ===== Cart badge ===== */
+/* =========================
+   CART BADGE
+========================= */
 function updateCartBadge() {
   if (!cartCountEl) return;
   cartCountEl.textContent = String(cartUniqueProductsCount());
 }
 
-/* ===== Added-to-cart popup (2 кнопки) ===== */
+/* =========================
+   MINI "ADDED" MODAL
+========================= */
 function ensureAddedModal() {
   if (document.getElementById("addedModal")) return;
 
@@ -442,7 +471,9 @@ function hideAddedModal() {
   document.body.classList.remove("miniModalOpen");
 }
 
-/* ===== Product modal ===== */
+/* =========================
+   PRODUCT MODAL
+========================= */
 function openProductModal(p) {
   currentProduct = p;
   const c = catById(getCats(), p.catId);
@@ -471,7 +502,6 @@ function openProductModal(p) {
   }
 
   if (mQty) {
-    // Кроки
     if (p.unitType === "length" || p.unitType === "weight") {
       mQty.step = "0.1";
       mQty.min = "0.1";
@@ -482,13 +512,11 @@ function openProductModal(p) {
       mQty.value = "1";
     }
 
-    // Для шт обмежимо max по складу
     if (p.unitType === "pcs") {
       const max = Number(p.stockQty || 0);
       if (max > 0) mQty.max = String(max);
       else mQty.removeAttribute("max");
     } else {
-      // для ваги/довжини max не ставимо (якщо хочеш — можна теж ставити)
       mQty.removeAttribute("max");
     }
   }
@@ -503,7 +531,9 @@ function closeProductModal() {
   currentProduct = null;
 }
 
-/* ===== Slider ===== */
+/* =========================
+   SLIDER
+========================= */
 const SLIDES = [
   { title: "НОВИНКА!", subtitle: "Декоративні покриття для інтер’єру", imageUrl: "assets/img/banner1.jpg" },
   { title: "ЗНИЖКИ", subtitle: "Топові матеріали за вигідними цінами", imageUrl: "assets/img/banner2.jpg" },
@@ -563,7 +593,9 @@ function startAutoSlider() {
   sliderTimer = setInterval(() => goToSlide(sliderIndex + 1, false), 10000);
 }
 
-/* ===== AUTH ===== */
+/* =========================
+   AUTH (покупці локально)
+========================= */
 function getUsers() {
   return JSON.parse(localStorage.getItem(KEY_USERS) || "[]");
 }
@@ -662,6 +694,26 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && authModal && !authModal.hidden) closeAuth();
 });
 
+/* ✅ адмін-логін через бекенд */
+async function tryAdminLogin(loginId, pass) {
+  const resp = await fetch(`${API_BASE}/api/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: loginId, password: pass }),
+  });
+
+  const data = await resp.json().catch(() => null);
+
+  if (resp.ok && data?.ok && data?.user?.role === "admin" && data?.token) {
+    localStorage.setItem("admin_token", data.token);
+    localStorage.setItem("current_user", JSON.stringify(data.user));
+    window.location.href = "admin.html";
+    return true;
+  }
+  return false;
+}
+
+/* REGISTER (покупець локально) */
 registerForm?.addEventListener("submit", (e) => {
   e.preventDefault();
 
@@ -692,22 +744,38 @@ registerForm?.addEventListener("submit", (e) => {
   refreshAuthUI();
 });
 
-loginForm?.addEventListener("submit", (e) => {
+/* LOGIN (спочатку адмін, потім покупець) */
+loginForm?.addEventListener("submit", async (e) => {
   e.preventDefault();
 
-  const name = (lName.value || "").trim();
+  const loginId = (lName.value || "").trim();
   const pass = (lPass.value || "").trim();
 
-  if (!name || !pass) {
-    lHint.textContent = "Введіть ім’я та пароль.";
+  if (!loginId || !pass) {
+    lHint.textContent = "Введіть логін та пароль.";
     return;
   }
 
+  // 1) пробуємо адмінку
+  try {
+    const isAdmin = await tryAdminLogin(loginId, pass);
+    if (isAdmin) return;
+  } catch (err) {
+    console.warn("Admin login check failed:", err);
+  }
+
+  // 2) покупець локально
   const users = getUsers();
-  const u = users.find((x) => String(x.name).toLowerCase() === name.toLowerCase() && x.pass === pass);
+  const key = loginId.toLowerCase();
+
+  const u = users.find((x) => {
+    const nameOk = String(x.name || "").toLowerCase() === key;
+    const contactOk = String(x.contact || "").toLowerCase() === key;
+    return (nameOk || contactOk) && x.pass === pass;
+  });
 
   if (!u) {
-    lHint.textContent = "Невірне ім’я або пароль.";
+    lHint.textContent = "Невірний логін або пароль.";
     return;
   }
 
@@ -721,18 +789,20 @@ btnLogout?.addEventListener("click", () => {
   refreshAuthUI();
 });
 
-/* ===== Events ===== */
+/* =========================
+   EVENTS
+========================= */
 backToCatalogBtn?.addEventListener("click", backToCatalog);
 
 applyFiltersBtn?.addEventListener("click", () => {
   if (!activeCatId) return;
-  const list = getProds().filter((p) => p.catId === activeCatId);
+  const list = getProds().filter((p) => Number(p.catId) === Number(activeCatId));
   renderProducts(applyFiltersToList(list), catById(getCats(), activeCatId)?.name || "Товари");
 });
 
 resetFiltersBtn?.addEventListener("click", () => {
   if (!activeCatId) return;
-  const list = getProds().filter((p) => p.catId === activeCatId);
+  const list = getProds().filter((p) => Number(p.catId) === Number(activeCatId));
   resetFiltersUI(list);
   renderProducts(list, catById(getCats(), activeCatId)?.name || "Товари");
 });
@@ -781,7 +851,6 @@ mAdd?.addEventListener("click", () => {
   let qty = Number(mQty?.value);
   if (!(qty > 0)) return;
 
-  // для "шт" не дозволяємо більше, ніж на складі
   if (currentProduct.unitType === "pcs") {
     const max = Number(currentProduct.stockQty || 0);
     qty = clamp(qty, 1, max);
@@ -806,21 +875,28 @@ mAdd?.addEventListener("click", () => {
 prevSlideBtn?.addEventListener("click", () => goToSlide(sliderIndex - 1, true));
 nextSlideBtn?.addEventListener("click", () => goToSlide(sliderIndex + 1, true));
 
+/* =========================
+   SYNC FROM API (НЕ ЗАТИРАЄ ПУСТИМ)
+========================= */
 async function syncFromApi() {
-  
-
-  // 1) категорії
+  // categories
   const catsRes = await fetch(`${API_BASE}/api/categories`);
   const cats = await catsRes.json();
-  localStorage.setItem("categories_db", JSON.stringify(cats));
+  if (Array.isArray(cats) && cats.length > 0) {
+    localStorage.setItem(KEY_CATS, JSON.stringify(cats));
+  }
 
-  // 2) товари
+  // products
   const prodsRes = await fetch(`${API_BASE}/api/products`);
   const prods = await prodsRes.json();
-  localStorage.setItem("products_db", JSON.stringify(prods));
+  if (Array.isArray(prods) && prods.length > 0) {
+    localStorage.setItem(KEY_PRODS, JSON.stringify(prods));
+  }
 }
 
-/* ===== INIT ===== */
+/* =========================
+   INIT
+========================= */
 (async function init() {
   try {
     await syncFromApi();
@@ -828,7 +904,6 @@ async function syncFromApi() {
     console.error("syncFromApi failed:", e);
   }
 
-  // далі твій старий init як був
   seedIfEmpty();
   migrateProductsIfNeeded();
   applyHeaderSettings();
