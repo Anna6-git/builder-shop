@@ -447,9 +447,8 @@ async function syncProductsFromApi() {
 }
 
 syncProductsFromApi().then(renderCart);
-// init
 if (callBtn) callBtn.href = `tel:${CALL_PHONE}`;
-// renderCart();
+
 
 
 const cDate = document.getElementById("cDate");
