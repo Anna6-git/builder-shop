@@ -1,6 +1,8 @@
+// backend/init-db.js
 "use strict";
 
 const db = require("./db");
+const bcrypt = require("bcryptjs");
 
 function run(sql) {
   return new Promise((resolve, reject) => {
@@ -8,7 +10,23 @@ function run(sql) {
   });
 }
 
+function getOne(sql, params = []) {
+  return new Promise((resolve, reject) => {
+    db.get(sql, params, (err, row) => (err ? reject(err) : resolve(row)));
+  });
+}
+
+function runParams(sql, params = []) {
+  return new Promise((resolve, reject) => {
+    db.run(sql, params, function (err) {
+      if (err) return reject(err);
+      resolve(this.lastID);
+    });
+  });
+}
+
 async function initDb() {
+  // ✅ categories
   await run(`
     CREATE TABLE IF NOT EXISTS categories (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -16,6 +34,8 @@ async function initDb() {
     );
   `);
 
+  // ✅ products (під routes/products.js)
+  // Якщо в проді вже була стара таблиця з іншими колонками — краще пересоздати
   await run(`DROP TABLE IF EXISTS products;`);
 
   await run(`
@@ -37,6 +57,7 @@ async function initDb() {
     );
   `);
 
+  // ✅ orders (якщо треба для /api/orders)
   await run(`
     CREATE TABLE IF NOT EXISTS orders (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -49,6 +70,32 @@ async function initDb() {
       total REAL DEFAULT 0
     );
   `);
+
+  // ✅ admins (для логіну в адмінку)
+  await run(`
+    CREATE TABLE IF NOT EXISTS admins (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      email TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+  `);
+
+  // ✅ seed admin (тільки якщо адмінів ще нема)
+  const anyAdmin = await getOne(`SELECT id FROM admins LIMIT 1`);
+  if (!anyAdmin) {
+    const email = (process.env.ADMIN_EMAIL || "").trim() || "admin@example.com";
+    const pass = (process.env.ADMIN_PASSWORD || "").trim() || "admin12345";
+
+    const hash = await bcrypt.hash(pass, 10);
+
+    await runParams(
+      `INSERT INTO admins (email, password_hash) VALUES (?, ?)`,
+      [email, hash]
+    );
+
+    console.log("✅ Admin seeded:", email);
+  }
 
   console.log("✅ DB initialized (tables ensured)");
 }
