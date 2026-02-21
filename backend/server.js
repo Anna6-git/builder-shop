@@ -12,6 +12,7 @@ const productRoutes = require("./routes/products");
 const categoryRoutes = require("./routes/categories");
 const settingsRoutes = require("./routes/settings");
 const ordersRoutes = require("./routes/orders");
+const { initDb } = require("./init-db");
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3001;
@@ -68,6 +69,8 @@ app.use((err, req, res, next) => {
   console.error("❌ Unhandled error:", err);
   res.status(500).json({ error: "Server error" });
 });
+
+initDb().catch((e) => console.error("❌ DB init failed:", e));
 
 app.listen(PORT, () => {
   console.log(`🚀 Backend running on port ${PORT}`);
