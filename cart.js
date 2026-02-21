@@ -335,40 +335,7 @@ if (!delivery_date || !delivery_time) {
     return;
   }
 
-  try {
-  if (checkoutHint) checkoutHint.textContent = "Надсилаю замовлення...";
 
-  const resp = await fetch("http://localhost:3001/api/orders", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Order-Key": "some_long_random_string",
-    },
-    body: JSON.stringify({
-      customer_name: name,
-      customer_phone: phone,
-      city: city,
-      address: addr,
-      delivery_date: delivery_date,
-      delivery_time: delivery_time,
-      note: "",
-      items: items,
-    }),
-  });
-
-  const data = await resp.json().catch(() => null);
-
-  if (!resp.ok) {
-    const msg = data?.error || data?.message || `HTTP ${resp.status}`;
-    if (checkoutHint) checkoutHint.textContent = "Помилка: " + msg;
-    return;
-  }
-} catch (e) {
-  if (checkoutHint) checkoutHint.textContent = "Помилка запиту: " + (e?.message || e);
-  return;
-}
-  const API_BASE = window.API_BASE || "http://localhost:3001";
-  const ORDER_KEY = "some_long_random_string"; 
 
   try {
     if (checkoutHint) checkoutHint.textContent = "Надсилаю замовлення...";
@@ -474,16 +441,16 @@ console.log("ORDER_KEY =", ORDER_KEY);
 });
 
 async function syncProductsFromApi() {
-  const res = await fetch("http://localhost:3001/api/products");
+  const res = await fetch(`${API_BASE}/api/products`);
   const prods = await res.json();
-  localStorage.setItem("products_db", JSON.stringify(prods));
+  localStorage.setItem(KEY_PRODS, JSON.stringify(prods));
 }
 
 syncProductsFromApi().then(renderCart);
 // init
 if (callBtn) callBtn.href = `tel:${CALL_PHONE}`;
 // renderCart();
-syncProductsFromApi().then(renderCart);
+
 
 const cDate = document.getElementById("cDate");
 const cTime = document.getElementById("cTime");
