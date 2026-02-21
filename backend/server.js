@@ -15,7 +15,7 @@ const ordersRoutes = require("./routes/orders");
 const app = express();
 const PORT = Number(process.env.PORT) || 3001;
 
-const API_BASE = "http://localhost:3001";
+const API_BASE = window.API_BASE || "http://localhost:3001";
 
 async function syncProductsFromApi() {
   const res = await fetch(`${API_BASE}/api/products`);

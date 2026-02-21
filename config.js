@@ -1,2 +1,1 @@
-// config.js
-window.API_BASE = "http://localhost:3001"; 
+window.API_BASE = "https://builder-shop-production.up.railway.app";

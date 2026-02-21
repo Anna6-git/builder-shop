@@ -1,4 +1,4 @@
-const API_BASE = "http://localhost:3001";
+const API_BASE = window.API_BASE || "http://localhost:3001";
 
 /* ===================== AUTH + API ===================== */
 function getToken() {

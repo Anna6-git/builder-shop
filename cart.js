@@ -2,7 +2,7 @@ console.log("✅ CLICK confirm");
 const KEY_PRODS = "products_db";
 const KEY_CATS = "categories_db";
 const KEY_CART = "cart_v2"; // має бути так само, як у script.js
-const API_BASE = "http://localhost:3001";
+const API_BASE = window.API_BASE || "http://localhost:3001";;
 const ORDER_KEY = "some_long_random_string";
 
 // контакти

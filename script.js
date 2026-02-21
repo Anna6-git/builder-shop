@@ -806,7 +806,7 @@ prevSlideBtn?.addEventListener("click", () => goToSlide(sliderIndex - 1, true));
 nextSlideBtn?.addEventListener("click", () => goToSlide(sliderIndex + 1, true));
 
 async function syncFromApi() {
-  const API_BASE = "http://localhost:3001";
+  const API_BASE = window.API_BASE || "http://localhost:3001";
 
   // 1) категорії
   const catsRes = await fetch(`${API_BASE}/api/categories`);
