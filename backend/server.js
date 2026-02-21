@@ -1,3 +1,4 @@
+
 "use strict";
 
 const path = require("path");
@@ -14,6 +15,8 @@ const ordersRoutes = require("./routes/orders");
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3001;
+
+require("./init-db");
 
 /**
  * ✅ CORS
