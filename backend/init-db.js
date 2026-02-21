@@ -35,8 +35,7 @@ async function initDb() {
   `);
 
   // ✅ products (під routes/products.js)
-  // Якщо раніше була інша схема — пересоздаємо
-  await run(`DROP TABLE IF EXISTS products;`);
+ 
 
   await run(`
     CREATE TABLE IF NOT EXISTS products (
