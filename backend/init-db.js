@@ -35,7 +35,7 @@ async function initDb() {
   `);
 
   // ✅ products (під routes/products.js)
-  // Якщо в проді вже була стара таблиця з іншими колонками — краще пересоздати
+  // Якщо раніше була інша схема — пересоздаємо
   await run(`DROP TABLE IF EXISTS products;`);
 
   await run(`
@@ -57,7 +57,7 @@ async function initDb() {
     );
   `);
 
-  // ✅ orders (якщо треба для /api/orders)
+  // ✅ orders
   await run(`
     CREATE TABLE IF NOT EXISTS orders (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -71,7 +71,7 @@ async function initDb() {
     );
   `);
 
-  // ✅ admins (для логіну в адмінку)
+  // ✅ admins
   await run(`
     CREATE TABLE IF NOT EXISTS admins (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -81,12 +81,11 @@ async function initDb() {
     );
   `);
 
-  // ✅ seed admin (тільки якщо адмінів ще нема)
+  // ✅ seed admin (якщо адмінів ще нема)
   const anyAdmin = await getOne(`SELECT id FROM admins LIMIT 1`);
   if (!anyAdmin) {
     const email = (process.env.ADMIN_EMAIL || "").trim() || "admin@example.com";
     const pass = (process.env.ADMIN_PASSWORD || "").trim() || "admin12345";
-
     const hash = await bcrypt.hash(pass, 10);
 
     await runParams(
@@ -95,6 +94,23 @@ async function initDb() {
     );
 
     console.log("✅ Admin seeded:", email);
+  }
+
+  // ✅ force reset / ensure admin password from ENV (створить або оновить)
+  const envEmail = (process.env.ADMIN_EMAIL || "").trim();
+  const envPass = (process.env.ADMIN_PASSWORD || "").trim();
+
+  if (envEmail && envPass) {
+    const hash = await bcrypt.hash(envPass, 10);
+
+    await runParams(
+      `INSERT INTO admins (email, password_hash)
+       VALUES (?, ?)
+       ON CONFLICT(email) DO UPDATE SET password_hash=excluded.password_hash`,
+      [envEmail, hash]
+    );
+
+    console.log("✅ Admin password ensured for:", envEmail);
   }
 
   console.log("✅ DB initialized (tables ensured)");
