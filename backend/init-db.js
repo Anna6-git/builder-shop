@@ -1,6 +1,7 @@
 "use strict";
 
 const db = require("./db");
+const { initDb } = require("./init-db");
 
 function run(sql) {
   return new Promise((resolve, reject) => {
