@@ -1,3 +1,4 @@
+const API_BASE = window.API_BASE || "http://localhost:3001";
 const KEY_CATS = "categories_db";
 const KEY_PRODS = "products_db";
 const KEY_CART = "cart_v2";
@@ -806,7 +807,7 @@ prevSlideBtn?.addEventListener("click", () => goToSlide(sliderIndex - 1, true));
 nextSlideBtn?.addEventListener("click", () => goToSlide(sliderIndex + 1, true));
 
 async function syncFromApi() {
-  const API_BASE = window.API_BASE || "http://localhost:3001";
+  
 
   // 1) категорії
   const catsRes = await fetch(`${API_BASE}/api/categories`);
