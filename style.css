@@ -885,3 +885,72 @@ body.miniModalOpen{
   /* трохи компактніші товари */
   .prodImg { height: 140px; }
 }
+
+/* ===== MOBILE FIX: checkout modal scroll ===== */
+#checkoutOverlay {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 12px;
+}
+
+#checkoutModal {
+  max-height: calc(100vh - 24px);
+  overflow: auto;                 /* ключове */
+  -webkit-overflow-scrolling: touch;
+}
+
+body.modalOpen {
+  overflow: hidden;               /* щоб не скролився фон */
+}
+
+/* ===== MOBILE FIX: layout ===== */
+@media (max-width: 768px) {
+  .container {
+    padding: 16px 12px;
+  }
+
+  /* каталоги/сітки */
+  .grid, .catalogGrid, .productsGrid {
+    grid-template-columns: 1fr !important;
+    gap: 12px;
+  }
+
+  /* картки товарів */
+  .productCard, .card {
+    width: 100%;
+  }
+
+  /* кошик рядок */
+  .cartRow {
+    display: grid;
+    grid-template-columns: 64px 1fr;
+    grid-template-areas:
+      "img info"
+      "price price"
+      "qty qty"
+      "sum del";
+    gap: 10px;
+    align-items: start;
+  }
+
+  .cartImg { grid-area: img; width: 64px; height: 64px; object-fit: cover; border-radius: 10px; }
+  .cartInfo { grid-area: info; }
+  .cartPrice { grid-area: price; text-align: left; }
+  .qtyBox { grid-area: qty; justify-content: flex-start; }
+  .cartSum { grid-area: sum; text-align: left; }
+  .delBtn { grid-area: del; justify-self: end; }
+
+  /* форма оформлення */
+  #checkoutModal input,
+  #checkoutModal select,
+  #checkoutModal button {
+    width: 100%;
+  }
+
+  /* щоб кнопка не вилітала за екран */
+  #checkoutSendBtn {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+  }
+}

@@ -6,21 +6,34 @@ const router = express.Router();
 const db = require("../db");
 const auth = require("../middleware/auth");
 
-/**
- * POST /api/orders
- * headers:
- *   X-Order-Key: <ORDER_WEBHOOK_KEY>
- * body:
- * {
- *   customer_name, customer_phone, city, address, note,
- *   items: [{ product_id, qty }]
- * }
- */
+function expectedOrderKey() {
+  return (
+    process.env.ORDER_WEBHOOK_KEY ||
+    process.env.ORDER_KEY ||
+    "some_long_random_string"
+  );
+}
+
+function ensureTables(cb) {
+  db.serialize(() => {
+    db.run(
+      `CREATE TABLE IF NOT EXISTS order_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        order_id INTEGER NOT NULL,
+        product_id INTEGER NOT NULL,
+        qty REAL NOT NULL,
+        FOREIGN KEY (order_id) REFERENCES orders(id),
+        FOREIGN KEY (product_id) REFERENCES products(id)
+      );`
+    );
+    cb();
+  });
+}
 
 // POST /api/orders (публічно, але захищено ключем)
 router.post("/", (req, res) => {
   const key = req.headers["x-order-key"];
-  if (!key || key !== process.env.ORDER_WEBHOOK_KEY) {
+  if (!key || key !== expectedOrderKey()) {
     return res.status(403).json({ error: "Forbidden" });
   }
 
@@ -35,16 +48,15 @@ router.post("/", (req, res) => {
   const items = Array.isArray(body.items) ? body.items : [];
 
   if (!customer_name || !customer_phone || !city || !address) {
-    return res
-      .status(400)
-      .json({ error: "customer_name, customer_phone, city, address required" });
+    return res.status(400).json({ error: "customer_name, customer_phone, city, address required" });
   }
-
+  if (!delivery_date || !delivery_time) {
+    return res.status(400).json({ error: "delivery_date and delivery_time required" });
+  }
   if (!items.length) {
     return res.status(400).json({ error: "items required" });
   }
 
-  // items: [{ product_id, qty }]
   for (const it of items) {
     const pid = Number(it.product_id);
     const qty = Number(it.qty);
@@ -53,75 +65,88 @@ router.post("/", (req, res) => {
     }
   }
 
-  db.serialize(() => {
-    db.run("BEGIN TRANSACTION");
+  ensureTables(() => {
+    // ✅ перевірка зайнятого часу
+    db.get(
+      `SELECT id FROM orders WHERE delivery_date = ? AND delivery_time = ? LIMIT 1`,
+      [delivery_date, delivery_time],
+      (eBusy, busyRow) => {
+        if (eBusy) return res.status(500).json({ error: eBusy.message });
+        if (busyRow) return res.status(409).json({ error: "Цей час зайнятий. Оберіть інший." });
 
-    db.run(
-      `INSERT INTO orders (customer_name, customer_phone, city, address, note, status, created_at)
-       VALUES (?, ?, ?, ?, ?, 'new', datetime('now'))`,
-      [customer_name, customer_phone, city, address, note],
-      function (err) {
-        if (err) {
-          db.run("ROLLBACK");
-          return res.status(500).json({ error: err.message });
-        }
+        db.serialize(() => {
+          db.run("BEGIN TRANSACTION");
 
-        const orderId = this.lastID;
-
-        let left = items.length;
-        let failed = false;
-
-        const rollback = (status, payload) => {
-          if (failed) return;
-          failed = true;
-          db.run("ROLLBACK", () => res.status(status).json(payload));
-        };
-
-        const commit = () => {
-          if (failed) return;
-          db.run("COMMIT", (e2) => {
-            if (e2) return res.status(500).json({ error: e2.message });
-            return res.json({ ok: true, id: orderId });
-          });
-        };
-
-        items.forEach((it) => {
-          const pid = Number(it.product_id);
-          const qty = Number(it.qty);
-
-          // Перевірка наявності товару і складу
-          db.get(
-            "SELECT id, stock_qty FROM products WHERE id = ? LIMIT 1",
-            [pid],
-            (eGet, row) => {
-              if (eGet) return rollback(500, { error: eGet.message });
-              if (!row) return rollback(400, { error: `product ${pid} not found` });
-
-              const stock = Number(row.stock_qty);
-              if (!Number.isFinite(stock) || stock < qty) {
-                return rollback(400, { error: `not enough stock for product ${pid}` });
+          db.run(
+            `INSERT INTO orders (customerName, phone, address, itemsJson, total, status, created_at, delivery_date, delivery_time)
+             VALUES (?, ?, ?, ?, ?, 'new', datetime('now'), ?, ?)`,
+            [
+              customer_name,
+              customer_phone,
+              `${city}, ${address}`,
+              JSON.stringify(items),
+              0,
+              delivery_date,
+              delivery_time,
+            ],
+            function (err) {
+              if (err) {
+                db.run("ROLLBACK");
+                return res.status(500).json({ error: err.message });
               }
 
-              // Додаємо позицію в order_items
-              db.run(
-                "INSERT INTO order_items (order_id, product_id, qty) VALUES (?, ?, ?)",
-                [orderId, pid, qty],
-                (eIns) => {
-                  if (eIns) return rollback(500, { error: eIns.message });
+              const orderId = this.lastID;
 
-                  // Списуємо склад
+              let left = items.length;
+              let failed = false;
+
+              const rollback = (status, payload) => {
+                if (failed) return;
+                failed = true;
+                db.run("ROLLBACK", () => res.status(status).json(payload));
+              };
+
+              const commit = () => {
+                if (failed) return;
+                db.run("COMMIT", (e2) => {
+                  if (e2) return res.status(500).json({ error: e2.message });
+                  return res.json({ ok: true, id: orderId });
+                });
+              };
+
+              items.forEach((it) => {
+                const pid = Number(it.product_id);
+                const qty = Number(it.qty);
+
+                db.get("SELECT id, stock_qty FROM products WHERE id = ? LIMIT 1", [pid], (eGet, row) => {
+                  if (eGet) return rollback(500, { error: eGet.message });
+                  if (!row) return rollback(400, { error: `product ${pid} not found` });
+
+                  const stock = Number(row.stock_qty);
+                  if (!Number.isFinite(stock) || stock < qty) {
+                    return rollback(400, { error: `not enough stock for product ${pid}` });
+                  }
+
                   db.run(
-                    "UPDATE products SET stock_qty = stock_qty - ? WHERE id = ?",
-                    [qty, pid],
-                    (eUpd) => {
-                      if (eUpd) return rollback(500, { error: eUpd.message });
+                    "INSERT INTO order_items (order_id, product_id, qty) VALUES (?, ?, ?)",
+                    [orderId, pid, qty],
+                    (eIns) => {
+                      if (eIns) return rollback(500, { error: eIns.message });
 
-                      left -= 1;
-                      if (left === 0) commit();
+                      db.run(
+                        "UPDATE products SET stock_qty = stock_qty - ? WHERE id = ?",
+                        [qty, pid],
+                        (eUpd) => {
+                          if (eUpd) return rollback(500, { error: eUpd.message });
+
+                          left -= 1;
+                          if (left === 0) commit();
+                        }
+                      );
                     }
                   );
-                }
-              );
+                });
+              });
             }
           );
         });
@@ -133,7 +158,7 @@ router.post("/", (req, res) => {
 // GET /api/orders (список) — тільки для адміна
 router.get("/", auth, (req, res) => {
   db.all(
-    `SELECT id, customer_name, customer_phone, city, address, note, status, created_at
+    `SELECT id, customerName, phone, address, status, created_at, delivery_date, delivery_time
      FROM orders
      ORDER BY id DESC`,
     [],
@@ -150,7 +175,7 @@ router.get("/:id", auth, (req, res) => {
   if (!Number.isInteger(id)) return res.status(400).json({ error: "invalid id" });
 
   db.get(
-    `SELECT id, customer_name, customer_phone, city, address, note, status, created_at
+    `SELECT id, customerName, phone, address, status, created_at, delivery_date, delivery_time
      FROM orders WHERE id = ? LIMIT 1`,
     [id],
     (e1, order) => {

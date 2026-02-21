@@ -4,9 +4,9 @@
 const db = require("./db");
 const bcrypt = require("bcryptjs");
 
-function run(sql) {
+function run(sql, params = []) {
   return new Promise((resolve, reject) => {
-    db.run(sql, (err) => (err ? reject(err) : resolve()));
+    db.run(sql, params, (err) => (err ? reject(err) : resolve()));
   });
 }
 
@@ -35,8 +35,6 @@ async function initDb() {
   `);
 
   // ✅ products (під routes/products.js)
- 
-
   await run(`
     CREATE TABLE IF NOT EXISTS products (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -56,7 +54,7 @@ async function initDb() {
     );
   `);
 
-  // ✅ orders
+  // ✅ orders (додаємо дату/час доставки)
   await run(`
     CREATE TABLE IF NOT EXISTS orders (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -66,9 +64,15 @@ async function initDb() {
       phone TEXT,
       address TEXT,
       itemsJson TEXT,
-      total REAL DEFAULT 0
+      total REAL DEFAULT 0,
+      delivery_date TEXT,
+      delivery_time TEXT
     );
   `);
+
+  // якщо orders вже існувала без цих колонок — додамо їх м’яко
+  await run(`ALTER TABLE orders ADD COLUMN delivery_date TEXT;`).catch(() => {});
+  await run(`ALTER TABLE orders ADD COLUMN delivery_time TEXT;`).catch(() => {});
 
   // ✅ admins
   await run(`
@@ -95,7 +99,7 @@ async function initDb() {
     console.log("✅ Admin seeded:", email);
   }
 
-  // ✅ force reset / ensure admin password from ENV (створить або оновить)
+  // ✅ ensure/reset admin password from ENV (створить або оновить)
   const envEmail = (process.env.ADMIN_EMAIL || "").trim();
   const envPass = (process.env.ADMIN_PASSWORD || "").trim();
 

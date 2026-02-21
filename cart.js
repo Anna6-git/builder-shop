@@ -1,9 +1,12 @@
-console.log("✅ CLICK confirm");
+/* cart.js */
+console.log("✅ cart.js loaded");
+
 const KEY_PRODS = "products_db";
 const KEY_CATS = "categories_db";
-const KEY_CART = "cart_v2"; // має бути так само, як у script.js
-const API_BASE = window.API_BASE || "http://localhost:3001";;
-const ORDER_KEY = "some_long_random_string";
+const KEY_CART = "cart_v2";
+
+const API_BASE = window.API_BASE || "http://localhost:3001";
+const ORDER_KEY = "some_long_random_string"; // має збігатися з Railway env ORDER_WEBHOOK_KEY
 
 // контакти
 const TG_LINK = "https://t.me/MarinaStyaglyuk";
@@ -50,16 +53,11 @@ function formatQty(qty) {
 function round1(x) {
   return Math.round(Number(x) * 10) / 10;
 }
-function clamp(n, min, max) {
-  const x = Number(n);
-  if (!Number.isFinite(x)) return min;
-  return Math.max(min, Math.min(max, x));
+function stepByUnitType(unitType) {
+  return unitType === "length" || unitType === "weight" ? 0.1 : 1;
 }
 function isInStock(p) {
   return Number(p?.stockQty || 0) > 0;
-}
-function stepByUnitType(unitType) {
-  return unitType === "length" || unitType === "weight" ? 0.1 : 1;
 }
 
 // ===== DOM =====
@@ -81,6 +79,8 @@ const cCity = document.getElementById("cCity");
 const cAddress = document.getElementById("cAddress");
 const cPhone = document.getElementById("cPhone");
 const cName = document.getElementById("cName");
+const cDate = document.getElementById("cDate");
+const cTime = document.getElementById("cTime");
 const checkoutHint = document.getElementById("checkoutHint");
 
 const checkoutPreview = document.getElementById("checkoutPreview");
@@ -134,7 +134,6 @@ function renderCart() {
           : "Немає в наявності"
         : "";
 
-    // якщо для "шт" в кошику більше, ніж на складі — показуємо попередження
     const overStock =
       p.unitType === "pcs" &&
       Number(p.stockQty || 0) > 0 &&
@@ -176,23 +175,19 @@ function renderCart() {
         key
       )}">🗑</button>
     `;
-
     cartList.appendChild(row);
   }
 
   if (cartItemsCount) cartItemsCount.textContent = formatQty(totalQty);
   if (cartTotal) cartTotal.textContent = String(Math.round(totalSum));
 
-  // preview у модалці
   if (checkoutPreview && checkoutTotal) {
     checkoutPreview.innerHTML = "";
-
     for (const [key, qtyRaw] of entries) {
       const qty = Number(qtyRaw);
       const { id, unit } = parseCartKey(key);
       const p = prods.find((x) => Number(x.id) === id);
       if (!p) continue;
-
       const sum = p.price * qty;
 
       const div = document.createElement("div");
@@ -209,17 +204,6 @@ function renderCart() {
       `;
       checkoutPreview.appendChild(div);
     }
-
-    // попередження про доставку словами (без формул)
-    const warn = document.createElement("div");
-    warn.className = "hint";
-    warn.style.marginTop = "10px";
-    warn.innerHTML = `ℹ️ Вартість доставки залежить від об’єму та ваги матеріалів.
-      Для габаритних товарів може знадобитися більша машина — доставка буде дорожчою.
-      Якщо замовлення поміщається в легкову з причепом — доставка зазвичай дешевша.
-      Точну суму доставки уточнюйте у менеджера після оформлення.`;
-    checkoutPreview.appendChild(warn);
-
     checkoutTotal.textContent = `${Math.round(totalSum)} ₴`;
   }
 }
@@ -229,11 +213,9 @@ function changeQty(key, delta) {
   const current = Number(cart[key] || 0);
   const next = round1(current + delta);
 
-  if (next <= 0) {
-    delete cart[key];
-  } else {
-    cart[key] = next;
-  }
+  if (next <= 0) delete cart[key];
+  else cart[key] = next;
+
   setCart(cart);
   renderCart();
 }
@@ -257,7 +239,6 @@ cartList?.addEventListener("click", (e) => {
   const prods = getProds();
   const { id } = parseCartKey(key);
   const p = prods.find((x) => Number(x.id) === id);
-
   const step = p ? stepByUnitType(p.unitType) : 1;
 
   if (act === "minus") changeQty(key, -step);
@@ -286,184 +267,19 @@ viberBtn?.addEventListener("click", openCheckout);
 
 closeBtn?.addEventListener("click", closeCheckout);
 overlay?.addEventListener("click", closeCheckout);
-
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") closeCheckout();
 });
 
-// ===== checkout submit (ГОЛОВНЕ) =====
-checkoutSendBtn?.addEventListener("click", async () => {
-  const city = (cCity?.value || "").trim();
-  const addr = (cAddress?.value || "").trim();
-  const phone = (cPhone?.value || "").trim();
-  const name = (cName?.value || "").trim();
-  const delivery_date = (cDate?.value || "").trim();
-  const delivery_time = (cTime?.value || "").trim();
-
-if (!delivery_date || !delivery_time) {
-  if (checkoutHint) checkoutHint.textContent = "Оберіть дату та час.";
-  return;
-}
-
-  if (!city || !addr || !phone || !name) {
-    if (checkoutHint) checkoutHint.textContent = "Заповніть всі поля.";
-    return;
-  }
-  
-
-  const cart = getCart();
-  const entries = Object.entries(cart).filter(([, q]) => Number(q) > 0);
-  if (entries.length === 0) {
-    if (checkoutHint) checkoutHint.textContent = "Кошик порожній.";
-    return;
-  }
-
-  const prods = getProds();
-
-  // items для бекенда: [{ product_id, qty }]
-  const items = [];
-  for (const [key, qtyRaw] of entries) {
-    const qty = Number(qtyRaw);
-    const { id } = parseCartKey(key);
-    const p = prods.find((x) => Number(x.id) === Number(id));
-    if (!p) continue;
-    items.push({ product_id: Number(id), qty: qty });
-  }
-
-  if (!items.length) {
-    if (checkoutHint) checkoutHint.textContent = "Не вдалося сформувати список товарів.";
-    return;
-  }
-
-
-
-  try {
-    if (checkoutHint) checkoutHint.textContent = "Надсилаю замовлення...";
-
-    console.log("API_BASE =", API_BASE);
-console.log("ORDER_KEY =", ORDER_KEY);
-
-    // 1) запис у БД (через X-Order-Key)
-    const resp = await fetch(`${API_BASE}/api/orders`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Order-Key": ORDER_KEY,
-      },
-      body: JSON.stringify({
-        customer_name: name,
-        customer_phone: phone,
-        city: city,
-        address: addr,
-        note: "",
-        items: items,
-      }),
-    });
-
-    const data = await resp.json().catch(() => null);
-
-    if (!resp.ok) {
-      const msg =
-        (data && (data.error || data.message))
-          ? (data.error || data.message)
-          : `HTTP ${resp.status}`;
-      if (checkoutHint) checkoutHint.textContent = "Помилка: " + msg;
-      return;
-    }
-
-    // 2) формуємо текст замовлення (Telegram)
-    const lines = [];
-    lines.push(`Замовлення:`);
-    lines.push(`ПІБ: ${name}`);
-    lines.push(`Телефон: ${phone}`);
-    lines.push(`Місто: ${city}`);
-    lines.push(`Адреса: ${addr}`);
-    lines.push(`--- Товари ---`);
-
-    let sum = 0;
-
-    for (const [key, qtyRaw] of entries) {
-      const qty = Number(qtyRaw);
-      const { id, unit } = parseCartKey(key);
-      const p = prods.find((x) => Number(x.id) === id);
-      if (!p) continue;
-
-      const rowSum = p.price * qty;
-      sum += rowSum;
-      lines.push(`${p.title} — ${formatQty(qty)} ${unit} × ${p.price}₴ = ${Math.round(rowSum)}₴`);
-    }
-
-    lines.push(`---`);
-    lines.push(`До оплати: ${Math.round(sum)}₴`);
-    lines.push(``);
-    lines.push(
-      `ℹ️ Доставка: вартість залежить від об’єму та ваги. Габаритні товари можуть потребувати більшу машину (дорожче), якщо влізе в легкову з причепом — зазвичай дешевше. Точну суму уточніть у менеджера.`
-    );
-
-    const msg = lines.join("\n");
-    const enc = encodeURIComponent(msg);
-
-    // 3) списуємо склад локально (products_db)
-    const updated = prods.map((p) => ({ ...p }));
-
-    for (const [key, qtyRaw] of entries) {
-      const qty = Number(qtyRaw);
-      const { id } = parseCartKey(key);
-      const idx = updated.findIndex((x) => Number(x.id) === Number(id));
-      if (idx === -1) continue;
-
-      if (typeof updated[idx].stockQty !== "undefined") {
-        if (updated[idx].unitType === "pcs") {
-          updated[idx].stockQty = Math.max(0, Number(updated[idx].stockQty || 0) - Math.round(qty));
-        } else {
-          updated[idx].stockQty = Math.max(0, round1(Number(updated[idx].stockQty || 0) - qty));
-        }
-      }
-    }
-
-    setProds(updated);
-
-    // 4) очищаємо кошик
-    setCart({});
-    renderCart();
-
-    // 5) показуємо кнопки Telegram/Viber/Call
-    if (sendTg) sendTg.href = `${TG_LINK}?text=${enc}`;
-    if (sendViber) sendViber.href = `${VIBER_LINK}`;
-    if (sendCall) sendCall.href = `tel:${CALL_PHONE}`;
-
-    if (afterConfirm) afterConfirm.hidden = false;
-    if (checkoutHint) checkoutHint.textContent = "Готово! Оберіть спосіб відправки.";
-
-  } catch (e) {
-    if (checkoutHint) checkoutHint.textContent = "Помилка запиту: " + (e?.message || e);
-  }
-});
-
-async function syncProductsFromApi() {
-  const res = await fetch(`${API_BASE}/api/products`);
-  const prods = await res.json();
-  localStorage.setItem(KEY_PRODS, JSON.stringify(prods));
-}
-
-syncProductsFromApi().then(renderCart);
-if (callBtn) callBtn.href = `tel:${CALL_PHONE}`;
-
-
-
-const cDate = document.getElementById("cDate");
-const cTime = document.getElementById("cTime");
-
-// налаштування графіку
+// ===== schedule time options =====
 const WORK = {
-  // 0=Нд ... 6=Сб
-  0: null,                 // Нд вихідний
+  0: null,
   1: { start: "09:00", end: "18:00" },
   2: { start: "09:00", end: "18:00" },
   3: { start: "09:00", end: "18:00" },
   4: { start: "09:00", end: "18:00" },
   5: { start: "09:00", end: "18:00" },
-  6: { start: "09:00", end: "16:00" }, // Сб коротше (можеш змінити)
+  6: { start: "09:00", end: "16:00" },
 };
 const SLOT_MIN = 30;
 
@@ -519,11 +335,131 @@ function fillTimeOptions(dateStr) {
   }
 }
 
-// ініціалізація
 if (cDate) {
-  // мінімум — сьогодні
   const today = new Date();
   cDate.min = today.toISOString().slice(0, 10);
   cDate.addEventListener("change", () => fillTimeOptions(cDate.value));
   fillTimeOptions(cDate.value);
 }
+
+// ===== checkout submit =====
+checkoutSendBtn?.addEventListener("click", async () => {
+  const city = (cCity?.value || "").trim();
+  const addr = (cAddress?.value || "").trim();
+  const phone = (cPhone?.value || "").trim();
+  const name = (cName?.value || "").trim();
+  const delivery_date = (cDate?.value || "").trim();
+  const delivery_time = (cTime?.value || "").trim();
+
+  if (!delivery_date || !delivery_time) {
+    if (checkoutHint) checkoutHint.textContent = "Оберіть дату та час.";
+    return;
+  }
+
+  if (!city || !addr || !phone || !name) {
+    if (checkoutHint) checkoutHint.textContent = "Заповніть всі поля.";
+    return;
+  }
+
+  const cart = getCart();
+  const entries = Object.entries(cart).filter(([, q]) => Number(q) > 0);
+  if (!entries.length) {
+    if (checkoutHint) checkoutHint.textContent = "Кошик порожній.";
+    return;
+  }
+
+  const prods = getProds();
+
+  const items = [];
+  for (const [key, qtyRaw] of entries) {
+    const qty = Number(qtyRaw);
+    const { id } = parseCartKey(key);
+    const p = prods.find((x) => Number(x.id) === Number(id));
+    if (!p) continue;
+    items.push({ product_id: Number(id), qty: qty });
+  }
+  if (!items.length) {
+    if (checkoutHint) checkoutHint.textContent = "Не вдалося сформувати список товарів.";
+    return;
+  }
+
+  try {
+    if (checkoutHint) checkoutHint.textContent = "Надсилаю замовлення...";
+
+    const resp = await fetch(`${API_BASE}/api/orders`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Order-Key": ORDER_KEY,
+      },
+      body: JSON.stringify({
+        customer_name: name,
+        customer_phone: phone,
+        city: city,
+        address: addr,
+        delivery_date,
+        delivery_time,
+        note: "",
+        items: items,
+      }),
+    });
+
+    const data = await resp.json().catch(() => null);
+
+    if (!resp.ok) {
+      const msg = data?.error || data?.message || `HTTP ${resp.status}`;
+      if (checkoutHint) checkoutHint.textContent = "Помилка: " + msg;
+      return;
+    }
+
+    // Telegram text
+    let sum = 0;
+    const lines = [];
+    lines.push(`Замовлення:`);
+    lines.push(`ПІБ: ${name}`);
+    lines.push(`Телефон: ${phone}`);
+    lines.push(`Місто: ${city}`);
+    lines.push(`Адреса: ${addr}`);
+    lines.push(`Дата/час: ${delivery_date} ${delivery_time}`);
+    lines.push(`--- Товари ---`);
+
+    for (const [key, qtyRaw] of entries) {
+      const qty = Number(qtyRaw);
+      const { id, unit } = parseCartKey(key);
+      const p = prods.find((x) => Number(x.id) === id);
+      if (!p) continue;
+      const rowSum = p.price * qty;
+      sum += rowSum;
+      lines.push(`${p.title} — ${formatQty(qty)} ${unit} × ${p.price}₴ = ${Math.round(rowSum)}₴`);
+    }
+
+    lines.push(`---`);
+    lines.push(`До оплати: ${Math.round(sum)}₴`);
+    const enc = encodeURIComponent(lines.join("\n"));
+
+    // clear cart
+    setCart({});
+    renderCart();
+
+    // show buttons
+    if (sendTg) sendTg.href = `${TG_LINK}?text=${enc}`;
+    if (sendViber) sendViber.href = `${VIBER_LINK}`;
+    if (sendCall) sendCall.href = `tel:${CALL_PHONE}`;
+
+    if (afterConfirm) afterConfirm.hidden = false;
+    if (checkoutHint) checkoutHint.textContent = "Готово! Оберіть спосіб відправки.";
+  } catch (e) {
+    if (checkoutHint) checkoutHint.textContent = "Помилка запиту: " + (e?.message || e);
+  }
+});
+
+// ===== sync products and render =====
+async function syncProductsFromApi() {
+  const res = await fetch(`${API_BASE}/api/products`);
+  const prods = await res.json();
+  localStorage.setItem(KEY_PRODS, JSON.stringify(prods));
+}
+
+syncProductsFromApi().then(renderCart);
+
+if (callBtn) callBtn.href = `tel:${CALL_PHONE}`;
