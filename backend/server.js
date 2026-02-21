@@ -15,21 +15,11 @@ const ordersRoutes = require("./routes/orders");
 const app = express();
 const PORT = Number(process.env.PORT) || 3001;
 
-const API_BASE = window.API_BASE || "http://localhost:3001";
-
-async function syncProductsFromApi() {
-  const res = await fetch(`${API_BASE}/api/products`);
-  const prods = await res.json();
-  localStorage.setItem("products_db", JSON.stringify(prods));
-}
-
 /**
  * ✅ CORS
  * - Dev: дозволяємо будь-який порт на localhost/127.0.0.1
  * - Prod: можна додати через ENV FRONTEND_ORIGINS="https://site1.com,https://site2.com"
  */
-
-
 const devOriginRegex = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
 
 const extraOrigins = String(process.env.FRONTEND_ORIGINS || "")
@@ -55,7 +45,6 @@ app.use(
 
 app.options(/.*/, cors());
 
-
 app.use(express.json({ limit: "2mb" }));
 
 // ✅ статика для завантажених фото
@@ -78,6 +67,6 @@ app.use((err, req, res, next) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 Backend running on http://localhost:${PORT}`);
+  console.log(`🚀 Backend running on port ${PORT}`);
   if (extraOrigins.length) console.log("✅ Extra allowed origins:", extraOrigins);
 });
