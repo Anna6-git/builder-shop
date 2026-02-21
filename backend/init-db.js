@@ -1,4 +1,3 @@
-// backend/init-db.js
 "use strict";
 
 const db = require("./db");
@@ -10,7 +9,6 @@ function run(sql) {
 }
 
 async function initDb() {
-  // ✅ categories
   await run(`
     CREATE TABLE IF NOT EXISTS categories (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -18,7 +16,6 @@ async function initDb() {
     );
   `);
 
-  // ✅ products (під routes/products.js)
   await run(`DROP TABLE IF EXISTS products;`);
 
   await run(`
@@ -40,7 +37,6 @@ async function initDb() {
     );
   `);
 
-  // ✅ orders (якщо треба для /api/orders)
   await run(`
     CREATE TABLE IF NOT EXISTS orders (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
