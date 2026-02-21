@@ -11,7 +11,10 @@ const auth = require("../middleware/auth");
 // GET all
 router.get("/", (req, res) => {
   db.all("SELECT * FROM categories", [], (err, rows) => {
-    if (err) return res.status(500).json({ error: err.message });
+    if (err) {
+      console.error("❌ /api/categories error:", err);
+      return res.status(500).json({ error: err.message || String(err) });
+    }
     res.json(rows);
   });
 });
