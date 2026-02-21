@@ -1,0 +1,15 @@
+# dependencies
+node_modules/
+
+# env
+.env
+backend/.env
+
+# uploads (якщо не хочеш заливати фото)
+backend/uploads/
+
+# local databases
+*.sqlite
+*.db
+*.sqlite-shm
+*.sqlite-wal

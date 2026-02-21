@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Адмін — БудМаркет</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<header class="header">
+  <a class="backSmall" href="index.html">← На сайт</a>
+
+  <div class="logo">
+    <div class="logo__title">Адмін-панель</div>
+    <div class="logo__subtitle">Категорії • Товари</div>
+  </div>
+
+  <div></div>
+</header>
+
+<main class="main">
+
+  <!-- LOGIN -->
+  <section class="card" id="loginBox">
+    <h2 class="sectionTitle">Вхід адміністратора</h2>
+
+    <div class="adminGrid">
+      <input id="adminName" class="searchInput" placeholder="Email" />
+      <div class="passWrap">
+        <input id="adminPass" class="searchInput" placeholder="Пароль" type="password" />
+        <button class="btn" type="button" id="toggleAdminPass" aria-label="Показати пароль">👁</button>
+      </div>
+
+      <button class="btnPrimary" id="loginBtn" type="button">Увійти</button>
+    </div>
+  </section>
+
+  <!-- PANEL -->
+  <section class="card" id="panelBox" hidden>
+    <div class="productsTop">
+      <h2 class="sectionTitle">Керування</h2>
+      <button class="btnDanger" id="logoutBtn">Вийти</button>
+    </div>
+
+    <div class="adminTabs">
+      <button class="tabBtn tabActive" id="tabCats">Категорії</button>
+      <button class="tabBtn" id="tabProds">Товари</button>
+    </div>
+
+    <!-- CATEGORIES -->
+    <div id="catsBox">
+      <h3 style="margin:12px 0 8px;">Додати категорію</h3>
+      <div class="adminFormCats">
+        <input id="catName" class="searchInput" placeholder="Назва категорії" />
+        <input id="catIcon" class="searchInput" placeholder="SVG/emoji (необов’язково, напр: 🧱)" />
+        <button class="btnPrimary" id="addCatBtn">Додати</button>
+      </div>
+
+      <h3 style="margin:16px 0 8px;">Список категорій</h3>
+      <div id="catsList" class="adminList"></div>
+    </div>
+
+    <!-- PRODUCTS -->
+    <div id="prodsBox" hidden>
+      <h3 style="margin:12px 0 8px;">Додати товар</h3>
+      <div class="adminFormProds">
+        <input id="pTitle" class="searchInput" placeholder="Назва" />
+        <select id="pCat" class="unitSelect"></select>
+        <input id="pBrand" class="searchInput" placeholder="Виробник (Knauf…)" />
+        <input id="pPrice" class="searchInput" placeholder="Ціна (грн)" type="number" />
+
+        <input id="pUnitType" class="searchInput" placeholder="Одиниця (шт/м/кг…)" />
+        <input id="pStockQty" class="searchInput" placeholder="Кількість на складі (число)" type="number" />
+
+        <input id="pVolume" class="searchInput" placeholder="Обʼєм 1 од. (м³, напр 0.03) — для доставки" type="number" step="0.001" />
+        <input id="pWeight" class="searchInput" placeholder="Вага 1 од. (кг, необовʼязково)" type="number" step="0.1" />
+
+        <input id="pImg" class="searchInput" placeholder="Фото URL (необов’язково)" />
+
+        <button class="btnPrimary" id="addProductBtn">Додати</button>
+      </div>
+
+      <h3 style="margin:16px 0 8px;">Список товарів</h3>
+      <div id="prodsList" class="adminList"></div>
+    </div>
+
+    <button class="btnPrimary" type="button" id="toggleOrdersBtn">
+  Показати замовлення
+</button>
+<div id="ordersWrap" hidden style="margin-top:10px;">
+  <div id="ordersList" class="adminList"></div>
+</div>
+  </section>
+</main>
+
+
+<script src="config.js"></script>
+<script src="admin.js"></script>
+
+</body>
+</html>

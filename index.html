@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>БудМаркет</title>
+ <link rel="stylesheet" href="./style.css">
+
+</head>
+<body>
+
+<header class="header">
+  <div class="header-inner">
+    <div class="brand">
+      <div class="logoMark" aria-label="Логотип">S</div>
+      <div class="brandTitle" id="siteTitle">БудМаркет Радомишль</div>
+    </div>
+
+    <div class="headerSearch">
+      <input
+        id="searchInput"
+        class="searchInput"
+        type="text"
+        placeholder="Пошук товару…"
+        autocomplete="off"
+      />
+      <div id="suggestions" class="suggestions" hidden></div>
+    </div>
+
+    <div class="headerRight">
+      <div class="headerContacts">
+        <div class="chipRow">
+          <a class="chip" id="tgLink" href="#" target="_blank" rel="noopener">Telegram</a>
+          <a class="chip" id="viberLink" href="#" target="_blank" rel="noopener">Viber</a>
+        </div>
+
+        <details class="contactToggle">
+          <summary class="chip">Контакти</summary>
+
+          <div class="phones">
+            <a id="phone1" href="tel:+380988966988">+380988966988 Магазин</a>
+            <a id="phone2" href="tel:+380979129698">+380979129698 Марина консультант</a>
+            <a id="phone3" href="tel:+380979129690">+380979129690 Олександр доставка</a>
+          </div>
+
+          <div class="worktime" id="workTime">Пн–Сб 09:00–17:00 • Нд вихідний</div>
+        </details>
+      </div>
+
+      <a class="btn" href="admin.html">Адмін</a>
+
+      <!-- AUTH кнопки -->
+      <button class="btn" type="button" id="btnLogin">Вхід</button>
+      <button class="btn" type="button" id="btnRegister">Реєстрація</button>
+
+      <!-- панель юзера (після входу) -->
+      <div class="userBox" id="userBox" hidden>
+        <span class="userHello" id="userHello">Привіт!</span>
+        <button class="btn" type="button" id="btnLogout">Вийти</button>
+      </div>
+
+      <a class="cartLink" href="cart.html" aria-label="Перейти в кошик">
+        🛒 <span id="cartCount">0</span>
+      </a>
+    </div>
+  </div>
+</header>
+
+<main class="layout">
+  <aside class="sidebar">
+    <div class="sidebarTitle">Каталог</div>
+    <nav id="catalogNav" class="catalogNav"></nav>
+  </aside>
+
+  <section class="content">
+    <div class="slider" id="slider">
+      <button class="nav prev" id="prevSlide" type="button">‹</button>
+      <button class="nav next" id="nextSlide" type="button">›</button>
+      <div class="slides" id="slides"></div>
+      <div class="dots" id="dots"></div>
+    </div>
+
+    <section class="productsSection" id="productsSection" hidden>
+      <div class="productsTop">
+        <h2 class="sectionTitle" id="productsTitle">Товари</h2>
+        <button class="btn" id="backToCatalogBtn" type="button">← Назад до каталогу</button>
+      </div>
+
+      <div class="shopLayout">
+        <aside class="filters">
+          <div class="filterBlock">
+            <div class="filterTitle">Ціна</div>
+            <div class="priceRow">
+              <input id="minPrice" type="number" value="0" />
+              <span>—</span>
+              <input id="maxPrice" type="number" value="999999" />
+              <span>грн</span>
+            </div>
+          </div>
+
+          <div class="filterBlock">
+            <label class="check">
+              <input id="inStockOnly" type="checkbox" />
+              <span>В наявності</span>
+            </label>
+          </div>
+
+          <div class="filterBlock">
+            <div class="filterTitle">Виробник</div>
+            <div id="brandList" class="checkList"></div>
+          </div>
+
+          <div class="filterBlock">
+            <div class="filterTitle">Одиниця</div>
+            <div id="unitList" class="checkList"></div>
+          </div>
+
+          <button class="btn" id="applyFiltersBtn" type="button">Застосувати</button>
+          <button class="btnDanger" id="resetFiltersBtn" type="button">Скинути</button>
+        </aside>
+
+        <div class="prodGrid" id="prodGrid"></div>
+      </div>
+    </section>
+  </section>
+</main>
+
+<!-- PRODUCT MODAL -->
+<div class="modalOverlay" id="modalOverlay"></div>
+
+<div class="modal" id="productModal" aria-hidden="true">
+  <div class="modal__top">
+    <h2 id="mTitle">Товар</h2>
+    <button class="close" id="mClose" type="button" aria-label="Закрити">✕</button>
+  </div>
+
+  <div class="modal__body">
+    <img id="mImg" class="mImg" alt="">
+    <p class="price" id="mPrice">0 ₴</p>
+    <p class="desc" id="mMeta"></p>
+
+    <div class="qtyRow">
+      <span>Кількість:</span>
+      <div class="qty">
+        <button id="mMinus" type="button">−</button>
+        <input id="mQty" type="number" min="1" step="1" value="1" />
+        <button id="mPlus" type="button">+</button>
+      </div>
+    </div>
+
+    <div class="qtyRow" style="margin-top:10px;">
+      <span>Одиниця:</span>
+      <select id="mUnit" class="unitSelect"></select>
+    </div>
+
+    <button class="addToCart" id="mAdd" type="button">Додати в кошик</button>
+    <p class="hint" id="mHint"></p>
+  </div>
+</div>
+
+<!-- AUTH MODAL -->
+<div class="authOverlay" id="authOverlay" hidden></div>
+
+<div class="authModal" id="authModal" aria-hidden="true" hidden>
+  <div class="authTop">
+    <div class="authTitle" id="authTitle">Вхід</div>
+    <button class="authClose" id="authClose" type="button" aria-label="Закрити">✕</button>
+  </div>
+
+  <!-- LOGIN -->
+  <form class="authBody" id="loginForm" hidden>
+    <label class="authLabel">Ім’я</label>
+    <input class="authInput" id="lName" autocomplete="username" placeholder="Напр. Марина">
+
+    <label class="authLabel">Пароль</label>
+    <input class="authInput" id="lPass" type="password" autocomplete="current-password" placeholder="••••••••">
+
+    <button class="btnPrimary authSubmit" type="submit">Увійти</button>
+    <div class="authHint" id="lHint"></div>
+
+    <div class="authSwitch">
+      Немає акаунта?
+      <button type="button" class="authLink" id="toRegister">Зареєструватися</button>
+    </div>
+  </form>
+
+  <!-- REGISTER -->
+  <form class="authBody" id="registerForm" hidden>
+    <label class="authLabel">Ім’я</label>
+    <input class="authInput" id="rName" autocomplete="given-name" placeholder="Напр. Олег">
+
+    <label class="authLabel">Прізвище</label>
+    <input class="authInput" id="rSurname" autocomplete="family-name" placeholder="Напр. Кравчук">
+
+    <label class="authLabel">Пошта або номер</label>
+    <input class="authInput" id="rContact" autocomplete="email" placeholder="email або +380...">
+
+    <label class="authLabel">Пароль</label>
+    <input class="authInput" id="rPass" type="password" autocomplete="new-password" placeholder="••••••••">
+
+    <button class="btnPrimary authSubmit" type="submit">Зареєструватися</button>
+    <div class="authHint" id="rHint"></div>
+
+    <div class="authSwitch">
+      Вже є акаунт?
+      <button type="button" class="authLink" id="toLogin">Увійти</button>
+    </div>
+  </form>
+</div>
+
+<script src="script.js"></script>
+
+<div id="cartPopup" class="modal" hidden>
+  <div class="modal__backdrop"></div>
+  <div class="modal__box">
+    <div id="cartPopupTitle" class="modal__title">Товар додано</div>
+    <div id="cartPopupBody" class="modal__body"></div>
+    <div class="modal__actions">
+      <button id="cartPopupContinue" class="btn">Повернутися до покупок</button>
+      <button id="cartPopupGoCart" class="btnPrimary">Перейти до кошика</button>
+    </div>
+  </div>
+</div>
+
+<script src="config.js"></script>
+<script src="script.js"></script>
+
+</body>
+</html>
