@@ -5,64 +5,63 @@ const router = express.Router();
 const db = require("../db");
 const auth = require("../middleware/auth");
 
-router.get("/", (_req, res) => {
-  db.all(`SELECT key, value FROM settings`, [], (err, rows) => {
-    if (err) return res.status(500).json({ error: err.message });
-
-    const out = {};
-    for (const row of rows) {
-      try {
-        out[row.key] = JSON.parse(row.value);
-      } catch {
-        out[row.key] = row.value;
-      }
-    }
-    res.json(out);
+function getSetting(key) {
+  return new Promise((resolve, reject) => {
+    db.get("SELECT value FROM settings WHERE key = ? LIMIT 1", [key], (err, row) => {
+      if (err) return reject(err);
+      resolve(row ? row.value : null);
+    });
   });
+}
+
+function setSetting(key, value) {
+  return new Promise((resolve, reject) => {
+    db.run(
+      `INSERT INTO settings (key, value)
+       VALUES (?, ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+      [key, value],
+      function (err) {
+        if (err) return reject(err);
+        resolve(true);
+      }
+    );
+  });
+}
+
+router.get("/", async (_req, res) => {
+  try {
+    const slidesRaw = await getSetting("slides");
+    const homeInfoCardsRaw = await getSetting("homeInfoCards");
+
+    res.json({
+      slides: slidesRaw ? JSON.parse(slidesRaw) : [],
+      homeInfoCards: homeInfoCardsRaw ? JSON.parse(homeInfoCardsRaw) : []
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
-router.post("/", auth, (req, res) => {
-  const body = req.body || {};
-  const entries = Object.entries(body);
+router.post("/", auth, async (req, res) => {
+  try {
+    const body = req.body || {};
 
-  if (!entries.length) {
-    return res.status(400).json({ error: "No settings provided" });
-  }
+    if (body.slides !== undefined) {
+      await setSetting("slides", JSON.stringify(Array.isArray(body.slides) ? body.slides : []));
+    }
 
-  db.serialize(() => {
-    db.run("BEGIN TRANSACTION");
-
-    let left = entries.length;
-    let failed = false;
-
-    const rollback = (msg) => {
-      if (failed) return;
-      failed = true;
-      db.run("ROLLBACK", () => res.status(500).json({ error: msg }));
-    };
-
-    const commit = () => {
-      if (failed) return;
-      db.run("COMMIT", (e) => {
-        if (e) return res.status(500).json({ error: e.message });
-        res.json({ ok: true });
-      });
-    };
-
-    for (const [key, value] of entries) {
-      db.run(
-        `INSERT INTO settings (key, value)
-         VALUES (?, ?)
-         ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
-        [String(key), JSON.stringify(value)],
-        (err) => {
-          if (err) return rollback(err.message);
-          left -= 1;
-          if (left === 0) commit();
-        }
+    if (body.homeInfoCards !== undefined) {
+      await setSetting(
+        "homeInfoCards",
+        JSON.stringify(Array.isArray(body.homeInfoCards) ? body.homeInfoCards : [])
       );
     }
-  });
+
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 module.exports = router;
