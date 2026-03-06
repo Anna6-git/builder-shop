@@ -12,13 +12,13 @@ const categoryRoutes = require("./routes/categories");
 const settingsRoutes = require("./routes/settings");
 const ordersRoutes = require("./routes/orders");
 const mediaRoutes = require("./routes/media");
-app.use("/api/media", mediaRoutes);
+
 const { initDb } = require("./init-db");
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3001;
 
-require("./init-db");
+/* -------------------- CORS -------------------- */
 
 const devOriginRegex = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
 
@@ -43,10 +43,18 @@ app.use(
 
 app.options(/.*/, cors());
 
+/* -------------------- MIDDLEWARE -------------------- */
+
 app.use(express.json({ limit: "10mb" }));
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
-app.get("/api/health", (_req, res) => res.json({ ok: true }));
+/* -------------------- HEALTH -------------------- */
+
+app.get("/api/health", (_req, res) => {
+  res.json({ ok: true });
+});
+
+/* -------------------- ROUTES -------------------- */
 
 app.use("/api/auth", authRoutes);
 app.use("/api/products", productRoutes);
@@ -55,14 +63,24 @@ app.use("/api/settings", settingsRoutes);
 app.use("/api/orders", ordersRoutes);
 app.use("/api/media", mediaRoutes);
 
+/* -------------------- ERROR HANDLER -------------------- */
+
 app.use((err, _req, res, _next) => {
   console.error("❌ Unhandled error:", err);
   res.status(500).json({ error: err.message || "Server error" });
 });
 
-initDb().catch((e) => console.error("❌ DB init failed:", e));
+/* -------------------- START SERVER -------------------- */
 
-app.listen(PORT, () => {
-  console.log(`🚀 Backend running on port ${PORT}`);
-  if (extraOrigins.length) console.log("✅ Extra allowed origins:", extraOrigins);
-});
+initDb()
+  .then(() => {
+    app.listen(PORT, () => {
+      console.log(`🚀 Backend running on port ${PORT}`);
+      if (extraOrigins.length)
+        console.log("✅ Extra allowed origins:", extraOrigins);
+    });
+  })
+  .catch((e) => {
+    console.error("❌ DB init failed:", e);
+    process.exit(1);
+  });
