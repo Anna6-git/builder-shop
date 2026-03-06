@@ -1015,7 +1015,14 @@ async function saveSlidesToBackend() {
 }
 
 
-let HOME_INFO_CARDS = [];
+let HOME_INFO_CARDS = [ {
+    title: "Швидке замовлення",
+    text: "Оформлюйте кошик за кілька хвилин зі смартфона."
+  },
+  {
+    title: "Доставка",
+    text: "По Радомишлю та району — уточнюйте в магазині."
+  }];
 
 /* =========================
    AUTH
