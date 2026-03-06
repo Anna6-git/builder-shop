@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Замовлення — БудМаркет</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<header class="header">
+  <a class="backSmall" href="admin.html">← Назад в адмінку</a>
+
+  <div class="logo">
+    <div class="logo__title">Замовлення</div>
+    <div class="logo__subtitle">Нові • Виконані • Вся історія</div>
+  </div>
+
+  <div></div>
+</header>
+
+<main class="main">
+  <section class="card">
+    <div class="adminTabs">
+      <button class="tabBtn tabActive" id="tabNew" type="button">Нові</button>
+      <button class="tabBtn" id="tabDone" type="button">Виконані</button>
+      <button class="tabBtn" id="tabAll" type="button">Вся історія</button>
+    </div>
+
+    <div id="ordersHint" class="hint" style="margin:10px 0;"></div>
+    <div id="ordersList" class="adminList"></div>
+  </section>
+</main>
+
+<script src="config.js"></script>
+<script src="orders-page.js"></script>
+</body>
+</html>

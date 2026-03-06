@@ -6,114 +6,106 @@
   <title>Кошик — БудМаркет</title>
   <link rel="stylesheet" href="style.css" />
 </head>
-
 <body class="cartBody">
 
-  <!-- СИНЯ ШАПКА КОШИКА -->
-  <header class="cartTopbar">
-    <a class="chip cartBack" href="index.html">← Назад</a>
-    <div class="cartTopTitle">Кошик</div>
-    <div></div>
-  </header>
+<header class="cartTopbar">
+  <a class="cartBack" href="index.html">← Назад</a>
+  <div class="cartTopTitle">Кошик</div>
+  <div></div>
+</header>
 
-  <main class="cartWrap">
-    <section class="cartCard">
-      <h2 class="cartH2">Ваші товари</h2>
+<main class="cartWrap">
+  <section class="cartCard">
+    <h2 class="cartH2">Ваші товари</h2>
+    <div id="cartList" class="cartTable"></div>
+    <div id="cartHint" class="hint" style="margin-top:10px;"></div>
 
-      <!-- сюди рендерить JS -->
-      <div id="cartList" class="cartTable"></div>
-
-      <div class="cartSummary">
-        <div class="cartSummaryLine">
-          <span>Всього позицій:</span>
-          <b id="cartItemsCount">0</b>
-        </div>
-        <div class="cartSummaryLine">
-          <span>Сума:</span>
-          <b><span id="cartTotal">0</span> ₴</b>
-        </div>
-
-        <button id="clearCartBtn" class="btnDanger cartClearBtn">Очистити кошик</button>
+    <div class="cartSummary">
+      <div class="cartSummaryLine">
+        <span>Всього позицій:</span>
+        <b id="cartItemsCount">0</b>
       </div>
-    </section>
-
-    <section class="cartCard">
-      <h2 class="cartH2">Надіслати замовлення</h2>
-      <p class="hint">Після натискання відкриється форма доставки.</p>
-
-      <div class="cartSendRow">
-        <button id="tgBtn" class="chip" type="button">Telegram</button>
-        <button id="viberBtn" class="chip" type="button">Viber</button>
-        <a id="callBtn" class="chip" href="tel:+380988966988">Подзвонити</a>
+      <div class="cartSummaryLine">
+        <span>Сума:</span>
+        <b><span id="cartTotal">0.00</span> ₴</b>
       </div>
-    </section>
-  </main>
 
-  <!-- МОДАЛКА ОФОРМЛЕННЯ -->
-  <div class="checkoutOverlay" id="checkoutOverlay"></div>
-
-  <div class="checkoutModal" id="checkoutModal" aria-hidden="true">
-    <div class="checkoutTop">
-      <div class="checkoutTitle">Оформлення</div>
-      <button class="checkoutClose" id="checkoutClose" aria-label="Закрити" type="button">✕</button>
+      <button id="clearCartBtn" class="btnDanger cartClearBtn" type="button">Очистити кошик</button>
     </div>
+  </section>
 
-    <div class="hint" style="margin-top:12px; line-height:1.4;">
-  <b>Важливо про доставку:</b> вартість доставки залежить від габаритів і об’єму замовлення.
-  Для об’ємних матеріалів може знадобитися більша машина — доставка буде дорожчою.
-  Якщо матеріали вміщуються в легкову з причепом — доставка дешевша.
+  <section class="cartCard">
+    <h2 class="cartH2">Оформлення замовлення</h2>
+    <p class="hint">Після натискання відкриється форма доставки.</p>
+
+    <div class="cartSendRow">
+      <button id="tgBtn" class="chip" type="button">Оформити</button>
+      <a id="callBtn" class="chip" href="tel:+380988966988">Подзвонити</a>
+    </div>
+  </section>
+</main>
+
+<div class="checkoutOverlay" id="checkoutOverlay"></div>
+
+<div class="checkoutModal" id="checkoutModal" aria-hidden="true">
+  <div class="checkoutTop">
+    <div class="checkoutTitle">Оформлення</div>
+    <button class="checkoutClose" id="checkoutClose" aria-label="Закрити" type="button">✕</button>
+  </div>
+
+  <div class="checkoutGrid">
+    <div class="checkoutForm">
+      <div class="hint" style="line-height:1.45; margin-bottom:10px;">
+        <b>Важливо:</b> вартість доставки залежить від об’єму та габаритів замовлення.
+      </div>
+
+      <label class="cLabel">Ім’я та прізвище</label>
+      <input id="cName" class="cInput" placeholder="Напр. Іван Петренко">
+
+      <label class="cLabel">Населений пункт</label>
+      <input id="cCity" class="cInput" placeholder="Напр. Радомишль">
+
+      <label class="cLabel">Адреса</label>
+      <input id="cAddress" class="cInput" placeholder="Вулиця, будинок">
+
+      <label class="cLabel">Телефон</label>
+      <input id="cPhone" class="cInput" placeholder="+380...">
+
+      <label class="cLabel">Email</label>
+      <input id="cEmail" class="cInput" placeholder="example@gmail.com">
+
+      <label class="cLabel">Дата доставки</label>
+      <input id="cDate" class="cInput" type="date">
+
+    <div class="hint" style="margin-top:6px;">
+  Неділя — вихідний. Доставка в неділю недоступна.
 </div>
 
+      <button id="checkoutSendBtn" class="btnPrimary cSend" type="button">Підтвердити</button>
 
-    <div class="checkoutGrid">
-      <div class="checkoutForm"> 
-
-        <label class="cLabel">Населений пункт</label>
-        <input id="cCity" class="cInput" placeholder="Напр. Радомишль">
-
-        <label class="cLabel">Адреса</label>
-        <input id="cAddress" class="cInput" placeholder="Вулиця, будинок">
-
-        <label class="cLabel">Телефон</label>
-        <input id="cPhone" class="cInput" placeholder="+380...">
-
-        <label class="cLabel">ПІБ</label>
-        <input id="cName" class="cInput" placeholder="Прізвище Ім’я">
-
-        <label style="display:block; margin-top:10px; font-weight:700;">Дата доставки</label>
-        <input id="cDate" class="searchInput" type="date" />
-
-        <label style="display:block; margin-top:10px; font-weight:700;">Час доставки</label>
-        <select id="cTime" class="unitSelect"></select>
-
-        <button id="checkoutSendBtn" class="btnPrimary cSend" type="button">Підтвердити</button>
-
-        <!-- ✅ ПІСЛЯ ПІДТВЕРДЖЕННЯ ПОКАЖЕ КНОПКИ -->
-        <div id="afterConfirm" class="afterConfirm" hidden>
-          <div class="hint" style="margin:8px 0 10px;">Оберіть, куди надіслати замовлення:</div>
-          <div class="cartSendRow">
-            <a id="sendTg" class="chip" target="_blank" rel="noopener">Telegram</a>
-            <a id="sendViber" class="chip" target="_blank" rel="noopener">Viber</a>
-            <a id="sendCall" class="chip" href="tel:+380988966988">Подзвонити</a>
-          </div>
+      <div id="afterConfirm" class="afterConfirm" hidden>
+        <div class="hint" style="margin-bottom:10px;">Замовлення створено. Можеш додатково написати в Telegram:</div>
+        <div class="cartSendRow">
+          <a id="sendTg" class="chip" target="_blank" rel="noopener">Telegram</a>
+          <a id="sendCall" class="chip" href="tel:+380988966988">Подзвонити</a>
         </div>
-
-        <div class="hint" id="checkoutHint"></div>
       </div>
 
-      <div class="checkoutRight">
-        <div class="checkoutRightTitle">Деталі замовлення</div>
-        <div id="checkoutPreview" class="checkoutPreview"></div>
-        <div class="checkoutTotalRow">
-          <span>До оплати</span>
-          <b id="checkoutTotal">0 ₴</b>
-        </div>
+      <div class="hint" id="checkoutHint"></div>
+    </div>
+
+    <div class="checkoutRight">
+      <div class="checkoutRightTitle">Деталі замовлення</div>
+      <div id="checkoutPreview" class="checkoutPreview"></div>
+      <div class="checkoutTotalRow">
+        <span>До оплати</span>
+        <b id="checkoutTotal">0.00 ₴</b>
       </div>
     </div>
   </div>
+</div>
 
 <script src="config.js"></script>
 <script src="cart.js"></script>
-
 </body>
 </html>

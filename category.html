@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Категорія — БудМаркет</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<header class="mobileHeader">
+  <div class="mobileHeader__top mobileHeader__top--back">
+    <button class="topBackBtn" id="categoryBackBtn" type="button" aria-label="Назад">←</button>
+
+    <a href="index.html" class="mobileBrand mobileBrand--logoOnly" aria-label="БудМаркет">
+      <img
+        src="assets/logo.png"
+        alt="БудМаркет"
+        class="mobileBrand__logo mobileBrand__logo--main"
+        onerror="this.style.display='none'"
+      >
+    </a>
+
+    <a class="cartBtnTop" href="cart.html" aria-label="Перейти в кошик">
+      <svg class="cartIconSvg" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M3 4h2l2.2 9.2a1 1 0 0 0 1 .8h8.8a1 1 0 0 0 1-.8L20 7H7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="10" cy="19" r="1.6" fill="currentColor"/>
+        <circle cx="17" cy="19" r="1.6" fill="currentColor"/>
+      </svg>
+      <span id="cartCount">0</span>
+    </a>
+  </div>
+</header>
+
+<main class="page">
+  <section class="categoryHeroCard">
+    <div class="categoryHeroCard__imageWrap">
+      <img id="categoryImage" class="categoryHeroCard__image" src="" alt="Категорія">
+    </div>
+    <h1 id="categoryTitle" class="sectionTitle" style="margin-top:12px;">Категорія</h1>
+    <div id="categoryCount" class="hint" style="margin-top:6px;">0 товарів</div>
+  </section>
+
+  <button
+  id="adminAddProductBtn"
+  class="btnPrimary adminOnly"
+  type="button"
+>
+  Додати товар
+</button>
+
+  <section style="margin-top:16px;">
+    <div id="categoryProductsGrid" class="prodGrid"></div>
+  </section>
+</main>
+
+<div class="authOverlay" id="adminProductOverlay" hidden></div>
+<div class="authModal adminModal" id="adminProductModal" aria-hidden="true" hidden>
+  <div class="authTop">
+<div class="authTitle" id="adminProductTitle">Додати товар</div>
+    <button class="authClose" id="adminProductClose" type="button">✕</button>
+  </div>
+
+  <div class="authBody">
+    <label class="authLabel">Назва товару</label>
+    <input class="authInput" id="pTitleInput" placeholder="Назва">
+
+    <label class="authLabel">Категорія</label>
+    <select class="authInput" id="pCategoryInput"></select>
+
+    <label class="authLabel">Ціна</label>
+    <input class="authInput" id="pPriceInput" type="number" step="0.01" placeholder="14.50">
+
+    <label class="authLabel">Виробник</label>
+    <input class="authInput" id="pBrandInput" placeholder="Knauf">
+
+<label class="authLabel">Одиниця виміру</label>
+<input class="authInput" id="pUnitInput" placeholder="шт / мішок / м2">
+
+<label class="authLabel">Тип товару</label>
+<select class="authInput" id="pOrderTypeInput">
+  <option value="stock">Звичайний товар</option>
+  <option value="custom">Під замовлення</option>
+</select>
+
+<label class="authLabel">Підказка для уточнень</label>
+<input
+  class="authInput"
+  id="pCustomNoteInput"
+  placeholder="Напр. Колір, розмір, довжина, побажання"
+>
+
+<label class="authLabel">ID товару</label>
+<input class="authInput" id="pIdInput" readonly placeholder="Створиться автоматично">
+
+    <label class="authLabel">Кількість на складі</label>
+    <input class="authInput" id="pStockInput" type="number" step="0.1" placeholder="0">
+
+    <label class="authLabel">Опис</label>
+    <textarea class="authInput" id="pDescInput" rows="4" placeholder="Опис товару"></textarea>
+
+<label class="authLabel">Пов’язані товари</label>
+
+<input
+  class="authInput"
+  id="pRelatedSearchInput"
+  type="text"
+  placeholder="Пошук товару за назвою або ID"
+>
+
+<select class="authInput" id="pRelatedInput" multiple size="6" style="margin-top:8px;"></select>
+
+<div class="hint" style="margin-top:6px;">
+  Можна обрати кілька товарів, утримуючи Ctrl.
+</div>
+
+    <label class="authLabel">Фото URL</label>
+    <input class="authInput" id="pImgInput" placeholder="https://...">
+
+    <label class="authLabel">Або завантажити фото</label>
+    <input class="authInput" id="pFileInput" type="file" accept="image/*">
+
+    <div class="adminPreviewWrap">
+      <img id="pPreview" class="adminPreviewImg" alt="" hidden>
+    </div>
+
+    <div class="adminFormActions">
+      <button class="btnPrimary" id="saveProductBtn" type="button">Зберегти</button>
+      <button class="btnDanger" id="deleteProductBtn" type="button">Видалити</button>
+    </div>
+
+    <div class="authHint" id="productFormHint"></div>
+  </div>
+</div>
+
+<script src="config.js"></script>
+<script src="category.js"></script>
+</body>
+</html>

@@ -3,135 +3,149 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>БудМаркет</title>
- <link rel="stylesheet" href="./style.css">
-
+<title>БудМаркет — будівельні матеріали Радомишль</title>
+<meta name="description" content="БудМаркет — будівельні матеріали у Радомишлі.">
+<h1 class="seoTitle">БудМаркет — будівельні матеріали у Радомишлі</h1>
+  <link rel="stylesheet" href="./style.css">
 </head>
 <body>
 
-<header class="header">
-  <div class="header-inner">
-    <div class="brand">
-      <div class="logoMark" aria-label="Логотип">S</div>
-      <div class="brandTitle" id="siteTitle">БудМаркет Радомишль</div>
-    </div>
+<header class="mobileHeader">
+  <div class="mobileHeader__top">
+    <button class="iconBtn burgerBtn" id="burgerBtn" type="button" aria-label="Меню">
+      <span class="burgerLines">
+        <span></span>
+        <span></span>
+        <span></span>
+      </span>
+    </button>
 
-    <div class="headerSearch">
-      <input
-        id="searchInput"
-        class="searchInput"
-        type="text"
-        placeholder="Пошук товару…"
-        autocomplete="off"
-      />
-      <div id="suggestions" class="suggestions" hidden></div>
-    </div>
+<a href="index.html" class="mobileBrand mobileBrand--logoOnly" aria-label="БудМаркет">
+  <img src="assets/logo.png" alt="БудМаркет" class="mobileBrand__logo mobileBrand__logo--main" onerror="this.style.display='none'">
+</a>
 
-    <div class="headerRight">
-      <div class="headerContacts">
-        <div class="chipRow">
-          <a class="chip" id="tgLink" href="#" target="_blank" rel="noopener">Telegram</a>
-          <a class="chip" id="viberLink" href="#" target="_blank" rel="noopener">Viber</a>
-        </div>
+    <a class="cartBtnTop" href="cart.html" aria-label="Перейти в кошик">
+      <svg class="cartIconSvg" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M3 4h2l2.2 9.2a1 1 0 0 0 1 .8h8.8a1 1 0 0 0 1-.8L20 7H7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="10" cy="19" r="1.6" fill="currentColor"/>
+        <circle cx="17" cy="19" r="1.6" fill="currentColor"/>
+      </svg>
+      <span id="cartCount">0</span>
+    </a>
+  </div>
 
-        <details class="contactToggle">
-          <summary class="chip">Контакти</summary>
-
-          <div class="phones">
-            <a id="phone1" href="tel:+380988966988">+380988966988 Магазин</a>
-            <a id="phone2" href="tel:+380979129698">+380979129698 Марина консультант</a>
-            <a id="phone3" href="tel:+380979129690">+380979129690 Олександр доставка</a>
-          </div>
-
-          <div class="worktime" id="workTime">Пн–Сб 09:00–17:00 • Нд вихідний</div>
-        </details>
-      </div>
-
-      <a class="btn" href="admin.html">Адмін</a>
-
-      <!-- AUTH кнопки -->
-      <button class="btn" type="button" id="btnLogin">Вхід</button>
-      <button class="btn" type="button" id="btnRegister">Реєстрація</button>
-
-      <!-- панель юзера (після входу) -->
-      <div class="userBox" id="userBox" hidden>
-        <span class="userHello" id="userHello">Привіт!</span>
-        <button class="btn" type="button" id="btnLogout">Вийти</button>
-      </div>
-
-      <a class="cartLink" href="cart.html" aria-label="Перейти в кошик">
-        🛒 <span id="cartCount">0</span>
-      </a>
-    </div>
+  <div class="mobileHeader__search">
+    <input
+      id="searchInput"
+      class="searchInput"
+      type="text"
+      placeholder="Пошук товару…"
+      autocomplete="off"
+    />
+    <div id="suggestions" class="suggestions" hidden></div>
   </div>
 </header>
 
-<main class="layout">
-  <aside class="sidebar">
-    <div class="sidebarTitle">Каталог</div>
-    <nav id="catalogNav" class="catalogNav"></nav>
-  </aside>
+<div class="drawerOverlay" id="drawerOverlay" hidden></div>
 
-  <section class="content">
+<aside class="drawer" id="drawer" aria-hidden="true">
+  <div class="drawer__top">
+    <div class="drawer__title">Меню</div>
+    <button class="iconBtn drawerCloseBtn" id="drawerClose" type="button" aria-label="Закрити">✕</button>
+  </div>
+
+  <div class="drawer__section">
+    <div class="drawer__label">Акаунт</div>
+    <button class="drawerLink" type="button" id="btnLogin">Вхід</button>
+    <button class="drawerLink" type="button" id="btnRegister">Реєстрація</button>
+
+    <div class="userBox drawerUserBox" id="userBox" hidden>
+      <span class="userHello" id="userHello">Привіт!</span>
+      <button class="drawerLink dangerText" type="button" id="btnLogout">Вийти</button>
+    </div>
+  </div>
+
+  <div class="drawer__section">
+    <div class="drawer__label">Контакти</div>
+
+    <div class="drawerWorktime" id="workTime">Пн–Сб 09:00–17:00 • Нд вихідний</div>
+
+    <a class="drawerLink drawerContact" id="phone1" href="tel:+380988966988">
+      <span class="drawerContact__title">Магазин</span>
+      <span class="drawerContact__value">+380988966988</span>
+    </a>
+
+    <a class="drawerLink drawerContact" id="phone2" href="tel:+380979129698">
+      <span class="drawerContact__title">Марина консультант</span>
+      <span class="drawerContact__value">+380979129698</span>
+    </a>
+
+    <a class="drawerLink drawerContact" id="phone3" href="tel:+380979129690">
+      <span class="drawerContact__title">Олександр доставка</span>
+      <span class="drawerContact__value">+380979129690</span>
+    </a>
+
+    <a class="drawerLink" id="tgLink" href="#" target="_blank" rel="noopener">Telegram</a>
+    <a class="drawerLink" id="viberLink" href="#" target="_blank" rel="noopener">Viber</a>
+<a
+  class="drawerLink"
+  id="mapLink"
+  href="https://www.google.com/maps/place/%D0%A1%D1%82%D1%8F%D0%B3%D0%BB%D1%8E%D0%BA,+%D0%B2%D1%83%D0%BB%D0%B8%D1%86%D1%8F+%D0%9C%D1%96%D1%81%D1%8C%D0%BA%D1%80%D0%B0%D0%B4%D0%B8,+%D0%A0%D0%B0%D0%B4%D0%BE%D0%BC%D0%B8%D1%88%D0%BB%D1%8C,+%D0%96%D0%B8%D1%82%D0%BE%D0%BC%D0%B8%D1%80%D1%81%D1%8C%D0%BA%D0%B0+%D0%BE%D0%B1%D0%BB%D0%B0%D1%81%D1%82%D1%8C,+12201/data=!4m2!3m1!1s0x472b77b858a905f3:0x1e9efc858bd007d9!17m2!4m1!1e3!18m1!1e1?utm_source=mstt_1&entry=gps&coh=192189&g_ep=CAESBjI2LjcuNRgAIJ6dCiqKASw5NDI2NzcyNyw5NDI5MjE5NSw5NDI5OTUzMiwxMDA3OTY0OTgsMTAwNzk2NTM1LDk0Mjg0NTA4LDk0MjgwNTc2LDk0MjA3Mzk0LDk0MjA3NTA2LDk0MjA4NTA2LDk0MjE4NjUzLDk0MjI5ODM5LDk0Mjc1MTY4LDk0Mjc5NjE5LDEwMDc5MTQ4M0ICVUE%3D&skid=d579b7d4-0c6d-40b5-9f5d-3372b713bd15&g_st=atm"
+  target="_blank"
+  rel="noopener"
+>Адреса на карті</a>
+  </div>
+
+  <div class="drawer__section">
+    <div class="drawer__label">Каталог</div>
+    <nav id="catalogNav" class="catalogNav drawerCatalog"></nav>
+  </div>
+</aside>
+
+<main class="page">
+  <section class="hero reveal">
+    <div class="sectionHead adminSliderHead">
+      <div></div>
+      <button id="adminSlidesBtn" class="btnPrimary adminOnly" hidden type="button">Редагувати слайдер</button>
+    </div>
+
     <div class="slider" id="slider">
       <button class="nav prev" id="prevSlide" type="button">‹</button>
       <button class="nav next" id="nextSlide" type="button">›</button>
       <div class="slides" id="slides"></div>
       <div class="dots" id="dots"></div>
     </div>
-
-    <section class="productsSection" id="productsSection" hidden>
-      <div class="productsTop">
-        <h2 class="sectionTitle" id="productsTitle">Товари</h2>
-        <button class="btn" id="backToCatalogBtn" type="button">← Назад до каталогу</button>
-      </div>
-
-      <div class="shopLayout">
-        <aside class="filters">
-          <div class="filterBlock">
-            <div class="filterTitle">Ціна</div>
-            <div class="priceRow">
-              <input id="minPrice" type="number" value="0" />
-              <span>—</span>
-              <input id="maxPrice" type="number" value="999999" />
-              <span>грн</span>
-            </div>
-          </div>
-
-          <div class="filterBlock">
-            <label class="check">
-              <input id="inStockOnly" type="checkbox" />
-              <span>В наявності</span>
-            </label>
-          </div>
-
-          <div class="filterBlock">
-            <div class="filterTitle">Виробник</div>
-            <div id="brandList" class="checkList"></div>
-          </div>
-
-          <div class="filterBlock">
-            <div class="filterTitle">Одиниця</div>
-            <div id="unitList" class="checkList"></div>
-          </div>
-
-          <button class="btn" id="applyFiltersBtn" type="button">Застосувати</button>
-          <button class="btnDanger" id="resetFiltersBtn" type="button">Скинути</button>
-        </aside>
-
-        <div class="prodGrid" id="prodGrid"></div>
-      </div>
-    </section>
   </section>
-</main>
 
-<!-- PRODUCT MODAL -->
+  <section class="quickInfo reveal">
+    <div class="quickInfo__item">
+      <div class="quickInfo__title">Швидке замовлення</div>
+      <div class="quickInfo__text">Оформлюйте кошик за кілька хвилин зі смартфона.</div>
+    </div>
+    <div class="quickInfo__item">
+      <div class="quickInfo__title">Доставка</div>
+      <div class="quickInfo__text">По Радомишлю та області — уточнюйте в магазині.</div>
+    </div>
+  </section>
+
+  <section class="catalogSection reveal">
+    <div class="sectionHead">
+      <h2 class="sectionTitle">Каталог</h2>
+      <button id="adminAddCategoryBtn" class="btnPrimary adminOnly" hidden type="button">+ Категорія</button>
+    </div>
+    <div id="catalogGrid" class="catalogGrid"></div>
+  </section>
+
+
 <div class="modalOverlay" id="modalOverlay"></div>
 
 <div class="modal" id="productModal" aria-hidden="true">
   <div class="modal__top">
     <h2 id="mTitle">Товар</h2>
-    <button class="close" id="mClose" type="button" aria-label="Закрити">✕</button>
+    <div class="modalTopActions">
+      <button class="btnPrimary adminOnly" id="adminEditCurrentBtn" hidden type="button">Редагувати</button>
+      <button class="close" id="mClose" type="button" aria-label="Закрити">✕</button>
+    </div>
   </div>
 
   <div class="modal__body">
@@ -148,7 +162,7 @@
       </div>
     </div>
 
-    <div class="qtyRow" style="margin-top:10px;">
+    <div class="qtyRow qtyRow--unit">
       <span>Одиниця:</span>
       <select id="mUnit" class="unitSelect"></select>
     </div>
@@ -158,7 +172,6 @@
   </div>
 </div>
 
-<!-- AUTH MODAL -->
 <div class="authOverlay" id="authOverlay" hidden></div>
 
 <div class="authModal" id="authModal" aria-hidden="true" hidden>
@@ -167,10 +180,9 @@
     <button class="authClose" id="authClose" type="button" aria-label="Закрити">✕</button>
   </div>
 
-  <!-- LOGIN -->
   <form class="authBody" id="loginForm" hidden>
-    <label class="authLabel">Ім’я</label>
-    <input class="authInput" id="lName" autocomplete="username" placeholder="Напр. Марина">
+    <label class="authLabel">Email / контакт / ім’я</label>
+    <input class="authInput" id="lName" autocomplete="username" placeholder="email або ім’я">
 
     <label class="authLabel">Пароль</label>
     <input class="authInput" id="lPass" type="password" autocomplete="current-password" placeholder="••••••••">
@@ -184,7 +196,6 @@
     </div>
   </form>
 
-  <!-- REGISTER -->
   <form class="authBody" id="registerForm" hidden>
     <label class="authLabel">Ім’я</label>
     <input class="authInput" id="rName" autocomplete="given-name" placeholder="Напр. Олег">
@@ -208,21 +219,174 @@
   </form>
 </div>
 
+<!-- ADMIN CATEGORY MODAL -->
+<div class="authOverlay" id="adminCategoryOverlay" hidden></div>
+<div class="authModal adminModal" id="adminCategoryModal" aria-hidden="true" hidden>
+  <div class="authTop">
+    <div class="authTitle" id="adminCategoryTitle">Категорія</div>
+    <button class="authClose" id="adminCategoryClose" type="button">✕</button>
+  </div>
 
-<div id="cartPopup" class="modal" hidden>
-  <div class="modal__backdrop"></div>
-  <div class="modal__box">
-    <div id="cartPopupTitle" class="modal__title">Товар додано</div>
-    <div id="cartPopupBody" class="modal__body"></div>
-    <div class="modal__actions">
-      <button id="cartPopupContinue" class="btn">Повернутися до покупок</button>
-      <button id="cartPopupGoCart" class="btnPrimary">Перейти до кошика</button>
+  <div class="authBody">
+    <label class="authLabel">Назва категорії</label>
+    <input class="authInput" id="catNameInput" placeholder="Напр. Суміші">
+
+    <label class="authLabel">Emoji / іконка</label>
+    <input class="authInput" id="catIconInput" placeholder="Напр. 🧱">
+
+    <label class="authLabel">Порядок</label>
+    <input class="authInput" id="catOrderInput" type="number" placeholder="1">
+
+    <label class="authLabel">Фото URL</label>
+    <input class="authInput" id="catImgInput" placeholder="https://...">
+
+    <label class="authLabel">Або завантажити фото</label>
+    <input class="authInput" id="catFileInput" type="file" accept="image/*">
+
+    <div class="adminPreviewWrap">
+      <img id="catPreview" class="adminPreviewImg" alt="" hidden>
     </div>
+
+    <div class="adminFormActions">
+      <button class="btnPrimary" id="saveCategoryBtn" type="button">Зберегти</button>
+      <button class="btnDanger" id="deleteCategoryBtn" type="button" hidden>Видалити</button>
+    </div>
+
+    <div class="authHint" id="catFormHint"></div>
   </div>
 </div>
 
+<!-- ADMIN PRODUCT MODAL -->
+<div class="authOverlay" id="adminProductOverlay" hidden></div>
+<div class="authModal adminModal" id="adminProductModal" aria-hidden="true" hidden>
+  <div class="authTop">
+    <div class="authTitle" id="adminProductTitle">Товар</div>
+    <button class="authClose" id="adminProductClose" type="button">✕</button>
+  </div>
+
+  <div class="authBody">
+    <label class="authLabel">Назва товару</label>
+    <input class="authInput" id="pTitleInput" placeholder="Назва">
+
+    <label class="authLabel">Категорія</label>
+    <select class="authInput" id="pCategoryInput"></select>
+
+    <label class="authLabel">Ціна</label>
+    <input class="authInput" id="pPriceInput" type="number" step="0.01" placeholder="14.50">
+
+    <label class="authLabel">Виробник</label>
+    <input class="authInput" id="pBrandInput" placeholder="Knauf">
+
+<label class="authLabel">Одиниця виміру</label>
+<input class="authInput" id="pUnitInput" placeholder="мішок / шт / м2 / лист">
+
+
+<label class="authLabel">Тип товару</label>
+<select class="authInput" id="pOrderTypeInput">
+  <option value="stock">Звичайний товар</option>
+  <option value="custom">Під замовлення</option>
+</select>
+
+<label class="authLabel">Підказка для уточнень</label>
+<input class="authInput" id="pCustomNoteInput" placeholder="Напр. Колір, розмір, довжина, побажання">
+
+<label class="authLabel">ID товару</label>
+<input class="authInput" id="pIdInput" readonly placeholder="Створиться автоматично">
+
+<label class="authLabel">Кількість на складі</label>
+<input class="authInput" id="pStockInput" type="number" step="0.1" placeholder="0">
+
+<label class="authLabel">Опис</label>
+<textarea class="authInput" id="pDescInput" rows="4" placeholder="Опис товару"></textarea>
+
+<label class="authLabel">ID пов’язаних товарів</label>
+<input class="authInput" id="pRelatedInput" placeholder="Напр. 12,15,19">
+
+    <label class="authLabel">Фото URL</label>
+    <input class="authInput" id="pImgInput" placeholder="https://...">
+
+    <label class="authLabel">Або завантажити фото</label>
+    <input class="authInput" id="pFileInput" type="file" accept="image/*">
+
+    <div class="adminPreviewWrap">
+      <img id="pPreview" class="adminPreviewImg" alt="" hidden>
+    </div>
+
+    <div class="adminFormActions">
+      <button class="btnPrimary" id="saveProductBtn" type="button">Зберегти</button>
+      <button class="btnDanger" id="deleteProductBtn" type="button" hidden>Видалити</button>
+    </div>
+
+    <div class="authHint" id="productFormHint"></div>
+  </div>
+</div>
+
+<div class="callFabWrap">
+  <div class="callFabMenu" id="callFabMenu" hidden>
+    <a class="callFabItem" href="tel:+380988966988">
+      <span class="callFabItem__label">Магазин</span>
+      <span class="callFabItem__phone">+380988966988</span>
+    </a>
+    <a class="callFabItem" href="tel:+380979129698">
+      <span class="callFabItem__label">Марина консультант</span>
+      <span class="callFabItem__phone">+380979129698</span>
+    </a>
+    <a class="callFabItem" href="tel:+380979129690">
+      <span class="callFabItem__label">Олександр доставка</span>
+      <span class="callFabItem__phone">+380979129690</span>
+    </a>
+  </div>
+
+  <button class="callFabBtn" id="callFabBtn" type="button" aria-label="Подзвонити">
+    <svg viewBox="0 0 24 24" class="callFabIcon" aria-hidden="true">
+      <path d="M6.6 10.8c1.8 3.5 3.1 4.8 6.6 6.6l2.2-2.2c.3-.3.8-.4 1.2-.3 1.3.4 2.8.6 4.2.6.7 0 1.2.5 1.2 1.2V20c0 .7-.5 1.2-1.2 1.2C10.4 21.2 2.8 13.6 2.8 3.8 2.8 3.1 3.3 2.6 4 2.6h3.2c.7 0 1.2.5 1.2 1.2 0 1.4.2 2.9.6 4.2.1.4 0 .9-.3 1.2l-2.1 1.6z" fill="currentColor"/>
+    </svg>
+  </button>
+</div>
+
+<div class="authOverlay" id="adminSlidesOverlay" hidden></div>
+<div class="authModal adminModal" id="adminSlidesModal" aria-hidden="true" hidden>
+  <div class="authTop">
+    <div class="authTitle">Слайдер</div>
+    <button class="authClose" id="adminSlidesClose" type="button">✕</button>
+  </div>
+
+  <div class="authBody">
+    <div id="slidesAdminList" class="slidesAdminList"></div>
+    <button class="btnPrimary" id="addSlideBtn" type="button">+ Додати слайд</button>
+    <div class="authHint" id="slidesAdminHint"></div>
+  </div>
+</div>
+
+<nav class="bottomNav">
+  <button class="bottomNav__item" id="bottomMenuBtn" type="button">
+    <span class="bottomBurgerIcon">
+      <span></span>
+      <span></span>
+      <span></span>
+    </span>
+    <small>Меню</small>
+  </button>
+
+  <a class="bottomNav__item" href="index.html">
+    <svg class="bottomIconSvg" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M3 10.5 12 3l9 7.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M5.5 9.5V21h13V9.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+    </svg>
+    <small>Головна</small>
+  </a>
+
+  <a class="bottomNav__item" href="cart.html">
+    <svg class="bottomIconSvg" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M3 4h2l2.2 9.2a1 1 0 0 0 1 .8h8.8a1 1 0 0 0 1-.8L20 7H7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="10" cy="19" r="1.6" fill="currentColor"/>
+      <circle cx="17" cy="19" r="1.6" fill="currentColor"/>
+    </svg>
+    <small>Кошик</small>
+  </a>
+</nav>
+
 <script src="config.js"></script>
 <script src="script.js"></script>
-
 </body>
 </html>

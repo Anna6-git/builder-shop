@@ -21,7 +21,9 @@ router.post("/", (req, res) => {
     }))
     .filter((it) => Number.isInteger(it.product_id) && it.product_id > 0 && it.qty > 0);
 
-  if (clean.length === 0) return res.status(400).json({ error: "invalid items" });
+if (!delivery_date) {
+  return res.status(400).json({ error: "delivery_date required" });
+}
 
   db.serialize(() => {
     db.run("BEGIN IMMEDIATE TRANSACTION");

@@ -33,46 +33,7 @@ async function api(path, options = {}) {
   return data;
 }
 
-/* ===================== ORDERS (admin view) ===================== */
-async function loadOrders() {
-  const el = document.getElementById("ordersList");
-  if (!el) return;
 
-  el.innerHTML = "<div>Завантаження...</div>";
-  const orders = await api("/orders", { method: "GET" });
-
-  if (!orders.length) {
-    el.innerHTML = `<div class="hint">Замовлень ще немає.</div>`;
-    return;
-  }
-
-  el.innerHTML = orders.map(o => `
-    <div class="adminRow" style="grid-template-columns: 1fr auto; gap:10px;">
-      <div>
-        <div style="font-weight:900">№${o.id} • ${o.customer_name} • ${o.customer_phone}</div>
-        <div style="font-size:12px;color:#6b7280">${o.city}, ${o.address}</div>
-        <div style="font-size:12px;color:#6b7280">${o.created_at} • статус: ${o.status}</div>
-      </div>
-      <button class="btnPrimary copyBtn" type="button" data-phone="${String(o.customer_phone || "")}">
-        Копіювати
-      </button>
-    </div>
-  `).join("");
-
-  // ✅ ОЦЕ ОБОВʼЯЗКОВО ТУТ (всередині функції)
-  el.querySelectorAll(".copyBtn").forEach((btn) => {
-    btn.addEventListener("click", async () => {
-      const phone = btn.dataset.phone || "";
-      try {
-        await navigator.clipboard.writeText(phone);
-        btn.textContent = "Скопійовано ✓";
-        setTimeout(() => (btn.textContent = "Копіювати"), 900);
-      } catch {
-        alert("Не вдалося скопіювати. Скопіюй вручну: " + phone);
-      }
-    });
-  });
-}
 
 /* ===================== UI ===================== */
 let token = localStorage.getItem("token") || "";
@@ -119,7 +80,6 @@ function showPanel() {
   panelBox.hidden = false;
   setTab("cats");
   refreshAll();
-  loadOrders().catch(console.error);
 }
 
 function showLogin() {
@@ -421,27 +381,4 @@ function renderProds() {
   showLogin();
 })();
 
-document.addEventListener("DOMContentLoaded", () => {
-  const btn = document.getElementById("toggleOrdersBtn");
-  const wrap = document.getElementById("ordersWrap");
-
-  console.log("toggle init", { btn: !!btn, wrap: !!wrap });
-
-  if (!btn || !wrap) return;
-
-  btn.addEventListener("click", async () => {
-    const show = wrap.hidden === true;
-    wrap.hidden = !show;
-    btn.textContent = show ? "Сховати замовлення" : "Показати замовлення";
-
-    if (show) {
-      try {
-        await loadOrders();
-      } catch (e) {
-        console.error(e);
-        const el = document.getElementById("ordersList");
-        if (el) el.innerHTML = `<div class="hint">Помилка: ${e.message}</div>`;
-      }
-    }
-  });
-});
+;

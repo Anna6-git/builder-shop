@@ -1,4 +1,3 @@
-
 "use strict";
 
 const path = require("path");
@@ -12,6 +11,8 @@ const productRoutes = require("./routes/products");
 const categoryRoutes = require("./routes/categories");
 const settingsRoutes = require("./routes/settings");
 const ordersRoutes = require("./routes/orders");
+const mediaRoutes = require("./routes/media");
+app.use("/api/media", mediaRoutes);
 const { initDb } = require("./init-db");
 
 const app = express();
@@ -19,11 +20,6 @@ const PORT = Number(process.env.PORT) || 3001;
 
 require("./init-db");
 
-/**
- * ✅ CORS
- * - Dev: дозволяємо будь-який порт на localhost/127.0.0.1
- * - Prod: можна додати через ENV FRONTEND_ORIGINS="https://site1.com,https://site2.com"
- */
 const devOriginRegex = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
 
 const extraOrigins = String(process.env.FRONTEND_ORIGINS || "")
@@ -34,11 +30,9 @@ const extraOrigins = String(process.env.FRONTEND_ORIGINS || "")
 app.use(
   cors({
     origin: (origin, cb) => {
-      if (!origin) return cb(null, true); // curl/postman
-
+      if (!origin) return cb(null, true);
       if (devOriginRegex.test(origin)) return cb(null, true);
       if (extraOrigins.includes(origin)) return cb(null, true);
-
       return cb(new Error(`CORS blocked for origin: ${origin}`), false);
     },
     allowedHeaders: ["Content-Type", "Authorization", "X-Order-Key"],
@@ -49,25 +43,21 @@ app.use(
 
 app.options(/.*/, cors());
 
-app.use(express.json({ limit: "2mb" }));
-
-// ✅ статика для завантажених фото
+app.use(express.json({ limit: "10mb" }));
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
-// health check
-app.get("/api/health", (req, res) => res.json({ ok: true }));
+app.get("/api/health", (_req, res) => res.json({ ok: true }));
 
-// routes
 app.use("/api/auth", authRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/categories", categoryRoutes);
 app.use("/api/settings", settingsRoutes);
 app.use("/api/orders", ordersRoutes);
+app.use("/api/media", mediaRoutes);
 
-// ✅ загальний хендлер помилок
-app.use((err, req, res, next) => {
+app.use((err, _req, res, _next) => {
   console.error("❌ Unhandled error:", err);
-  res.status(500).json({ error: "Server error" });
+  res.status(500).json({ error: err.message || "Server error" });
 });
 
 initDb().catch((e) => console.error("❌ DB init failed:", e));
