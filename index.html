@@ -110,23 +110,16 @@
     </div>
 
     <div class="slider" id="slider">
-      <button class="nav prev" id="prevSlide" type="button">‹</button>
-      <button class="nav next" id="nextSlide" type="button">›</button>
+<button class="nav prev" id="prevSlide" type="button">‹</button>
+<button class="nav next" id="nextSlide" type="button">›</button>
       <div class="slides" id="slides"></div>
       <div class="dots" id="dots"></div>
     </div>
   </section>
 
-  <section class="quickInfo reveal">
-    <div class="quickInfo__item">
-      <div class="quickInfo__title">Швидке замовлення</div>
-      <div class="quickInfo__text">Оформлюйте кошик за кілька хвилин зі смартфона.</div>
-    </div>
-    <div class="quickInfo__item">
-      <div class="quickInfo__title">Доставка</div>
-      <div class="quickInfo__text">По Радомишлю та області — уточнюйте в магазині.</div>
-    </div>
-  </section>
+ <section style="margin-top:12px;">
+  <div id="homeInfoCards"></div>
+</section>
 
   <section class="catalogSection reveal">
     <div class="sectionHead">
@@ -355,6 +348,25 @@
     <div id="slidesAdminList" class="slidesAdminList"></div>
     <button class="btnPrimary" id="addSlideBtn" type="button">+ Додати слайд</button>
     <div class="authHint" id="slidesAdminHint"></div>
+  </div>
+
+  <button class="btn adminOnly" id="adminInfoBtn" type="button" hidden>
+  Редагувати блоки
+</button>
+</div>
+
+<div class="authOverlay" id="adminInfoOverlay" hidden></div>
+<div class="authModal adminModal" id="adminInfoModal" hidden aria-hidden="true">
+  <div class="authTop">
+    <div class="authTitle">Блоки під слайдером</div>
+    <button class="authClose" id="adminInfoClose" type="button">✕</button>
+  </div>
+
+  <div class="authBody">
+    <div id="infoAdminList"></div>
+
+    <button class="btnPrimary" id="addInfoCardBtn" type="button">+ Додати блок</button>
+    <div class="authHint" id="infoAdminHint"></div>
   </div>
 </div>
 

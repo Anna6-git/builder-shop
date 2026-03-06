@@ -39,9 +39,9 @@ const upload = multer({
 router.post("/upload", auth, upload.single("image"), (req, res) => {
   if (!req.file) return res.status(400).json({ error: "Image required" });
 
-  const base =
-    (process.env.PUBLIC_BASE_URL || "").trim() ||
-    `http://localhost:${process.env.PORT || 3001}`;
+const base =
+  (process.env.PUBLIC_BASE_URL || "").trim() ||
+  `${req.protocol}://${req.get("host")}`;
 
   const url = `${base.replace(/\/$/, "")}/uploads/${req.file.filename}`;
   res.json({

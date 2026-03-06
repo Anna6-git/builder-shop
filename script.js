@@ -251,7 +251,17 @@ async function uploadImage(file) {
 
   const data = await res.json().catch(() => null);
   if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
-  return data?.url || "";
+let url = data?.url || "";
+
+if (url.startsWith("http://localhost:8080")) {
+  url = url.replace("http://localhost:8080", API_BASE);
+}
+
+if (url.startsWith("/uploads/")) {
+  url = `${API_BASE}${url}`;
+}
+
+return url;
 }
 
 /* =========================
@@ -925,6 +935,8 @@ function renderSlidesAdminList() {
     slidesAdminList.appendChild(card);
   });
 
+  
+
   slidesAdminList.querySelectorAll(".slideFileInput").forEach((input) => {
     input.addEventListener("change", async () => {
       const index = Number(input.dataset.index);
@@ -1001,6 +1013,9 @@ async function saveSlidesToBackend() {
     body: JSON.stringify({ slides: SLIDES })
   });
 }
+
+
+let HOME_INFO_CARDS = [];
 
 /* =========================
    AUTH
@@ -1367,6 +1382,98 @@ const productFormHint = document.getElementById("productFormHint");
 const pOrderTypeInput = document.getElementById("pOrderTypeInput");
 const pCustomNoteInput = document.getElementById("pCustomNoteInput");
 
+const adminInfoBtn = document.getElementById("adminInfoBtn");
+const adminInfoOverlay = document.getElementById("adminInfoOverlay");
+const adminInfoModal = document.getElementById("adminInfoModal");
+const adminInfoClose = document.getElementById("adminInfoClose");
+const infoAdminList = document.getElementById("infoAdminList");
+const addInfoCardBtn = document.getElementById("addInfoCardBtn");
+const infoAdminHint = document.getElementById("infoAdminHint");
+
+function openInfoAdminModal() {
+  if (!isAdmin()) return;
+  renderInfoAdminList();
+  adminInfoOverlay.hidden = false;
+  adminInfoModal.hidden = false;
+  adminInfoModal.setAttribute("aria-hidden", "false");
+}
+
+function closeInfoAdminModal() {
+  adminInfoOverlay.hidden = true;
+  adminInfoModal.hidden = true;
+  adminInfoModal.setAttribute("aria-hidden", "true");
+}
+
+adminInfoBtn?.addEventListener("click", openInfoAdminModal);
+adminInfoClose?.addEventListener("click", closeInfoAdminModal);
+adminInfoOverlay?.addEventListener("click", closeInfoAdminModal);
+
+function renderInfoAdminList() {
+  if (!infoAdminList) return;
+
+  infoAdminList.innerHTML = "";
+
+  HOME_INFO_CARDS.forEach((item, index) => {
+    const box = document.createElement("div");
+    box.className = "slideAdminCard";
+    box.style.marginBottom = "12px";
+
+    box.innerHTML = `
+      <div class="slideAdminCard__title">Блок ${index + 1}</div>
+      <div class="slideAdminCard__grid">
+        <input class="authInput" data-field="title" data-index="${index}" placeholder="Заголовок" value="${escapeHTML(item.title || "")}">
+        <textarea class="authInput" data-field="text" data-index="${index}" rows="3" placeholder="Текст">${escapeHTML(item.text || "")}</textarea>
+        <div class="slideAdminActions">
+          <button class="btnPrimary" data-act="save-info" data-index="${index}" type="button">Зберегти</button>
+          <button class="btnDanger" data-act="delete-info" data-index="${index}" type="button">Видалити</button>
+        </div>
+      </div>
+    `;
+
+    infoAdminList.appendChild(box);
+  });
+
+  infoAdminList.querySelectorAll('[data-act="save-info"]').forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const index = Number(btn.dataset.index);
+      const titleInput = infoAdminList.querySelector(`[data-field="title"][data-index="${index}"]`);
+      const textInput = infoAdminList.querySelector(`[data-field="text"][data-index="${index}"]`);
+
+      HOME_INFO_CARDS[index] = {
+        title: String(titleInput?.value || "").trim(),
+        text: String(textInput?.value || "").trim()
+      };
+
+      await saveHomeInfoCardsToBackend();
+      renderHomeInfoCards();
+      renderInfoAdminList();
+      if (infoAdminHint) infoAdminHint.textContent = "Блок збережено.";
+    });
+  });
+
+  infoAdminList.querySelectorAll('[data-act="delete-info"]').forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const index = Number(btn.dataset.index);
+      HOME_INFO_CARDS.splice(index, 1);
+      await saveHomeInfoCardsToBackend();
+      renderHomeInfoCards();
+      renderInfoAdminList();
+      if (infoAdminHint) infoAdminHint.textContent = "Блок видалено.";
+    });
+  });
+}
+
+addInfoCardBtn?.addEventListener("click", async () => {
+  HOME_INFO_CARDS.push({
+    title: "Новий блок",
+    text: ""
+  });
+
+  await saveHomeInfoCardsToBackend();
+  renderHomeInfoCards();
+  renderInfoAdminList();
+});
+
 function fillProductCategorySelect(selectedId = null) {
   if (!pCategoryInput) return;
 
@@ -1680,6 +1787,35 @@ async function syncFromApi() {
   }
 }
 
+const homeInfoCards = document.getElementById("homeInfoCards");
+
+function renderHomeInfoCards() {
+  if (!homeInfoCards) return;
+
+  homeInfoCards.innerHTML = "";
+
+  HOME_INFO_CARDS.forEach((item) => {
+    const card = document.createElement("div");
+    card.className = "infoCard reveal";
+    card.style.marginBottom = "10px";
+
+    card.innerHTML = `
+      <h3 class="sectionTitle" style="font-size:18px; margin-bottom:6px;">${escapeHTML(item.title || "")}</h3>
+      <p class="hint" style="font-size:16px;">${escapeHTML(item.text || "")}</p>
+    `;
+
+    homeInfoCards.appendChild(card);
+  });
+}
+
+async function saveHomeInfoCardsToBackend() {
+  await api("/settings", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ homeInfoCards: HOME_INFO_CARDS })
+  });
+}
+
 /* =========================
    INIT
 ========================= */
@@ -1696,17 +1832,23 @@ async function syncFromApi() {
 
   applyHeaderSettings();
   renderCatalog();
+  
 
   try {
-    const settings = await api("/settings", { method: "GET" });
-    if (Array.isArray(settings?.slides) && settings.slides.length) {
-      SLIDES = settings.slides;
-    }
+const settings = await api("/settings", { method: "GET" });
+
+if (Array.isArray(settings?.homeInfoCards)) {
+  HOME_INFO_CARDS = settings.homeInfoCards;
+}
+    if (Array.isArray(settings?.homeInfoCards) && settings.homeInfoCards.length) {
+  HOME_INFO_CARDS = settings.homeInfoCards;
+}
   } catch (e) {
     console.warn("settings load failed:", e);
   }
 
   renderSlider();
+  renderHomeInfoCards(); // renderHomeInfoCards();
   updateCartBadge();
   refreshAuthUI();
   initReveal();
