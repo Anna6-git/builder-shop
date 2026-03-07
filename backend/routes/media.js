@@ -8,7 +8,7 @@ const auth = require("../middleware/auth");
 
 const router = express.Router();
 
-const uploadDir = path.join(__dirname, "..", "uploads");
+const uploadDir = path.join(process.env.RAILWAY_VOLUME_MOUNT_PATH || "/data", "uploads");
 fs.mkdirSync(uploadDir, { recursive: true });
 
 function safeName(name) {

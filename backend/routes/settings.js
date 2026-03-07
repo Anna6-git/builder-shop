@@ -7,10 +7,14 @@ const auth = require("../middleware/auth");
 
 function getSetting(key) {
   return new Promise((resolve, reject) => {
-    db.get("SELECT value FROM settings WHERE key = ? LIMIT 1", [key], (err, row) => {
-      if (err) return reject(err);
-      resolve(row ? row.value : null);
-    });
+    db.get(
+      "SELECT value FROM settings WHERE key = ? LIMIT 1",
+      [key],
+      (err, row) => {
+        if (err) return reject(err);
+        resolve(row ? row.value : null);
+      }
+    );
   });
 }
 
@@ -48,7 +52,10 @@ router.post("/", auth, async (req, res) => {
     const body = req.body || {};
 
     if (body.slides !== undefined) {
-      await setSetting("slides", JSON.stringify(Array.isArray(body.slides) ? body.slides : []));
+      await setSetting(
+        "slides",
+        JSON.stringify(Array.isArray(body.slides) ? body.slides : [])
+      );
     }
 
     if (body.homeInfoCards !== undefined) {

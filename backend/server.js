@@ -46,7 +46,8 @@ app.options(/.*/, cors());
 /* -------------------- MIDDLEWARE -------------------- */
 
 app.use(express.json({ limit: "10mb" }));
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+const uploadsPath = path.join(process.env.RAILWAY_VOLUME_MOUNT_PATH || "/data", "uploads");
+app.use("/uploads", express.static(uploadsPath));
 
 /* -------------------- HEALTH -------------------- */
 

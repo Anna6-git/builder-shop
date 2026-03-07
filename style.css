@@ -2113,3 +2113,7 @@ body.modalOpen .checkoutModal {
   font-weight: 900;
   letter-spacing: 0.04em;
 }
+
+.homeInfoSection {
+  margin-top: 12px;
+}

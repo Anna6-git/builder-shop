@@ -264,6 +264,21 @@ if (url.startsWith("/uploads/")) {
 return url;
 }
 
+async function loadSettingsFromBackend() {
+  try {
+    const settings = await api("/settings", { method: "GET" });
+
+    if (Array.isArray(settings?.slides) && settings.slides.length) {
+      SLIDES = settings.slides;
+    }
+
+    if (Array.isArray(settings?.homeInfoCards) && settings.homeInfoCards.length) {
+      HOME_INFO_CARDS = settings.homeInfoCards;
+    }
+  } catch (e) {
+    console.warn("settings load failed:", e);
+  }
+}
 /* =========================
    HEADER SETTINGS
 ========================= */
@@ -624,7 +639,15 @@ function backToCatalog() {
 function findProductsByQuery(q) {
   const query = normalizeQuery(q);
   if (!query) return [];
-  return getProds().filter((p) => normalizeQuery(p.title).includes(query)).slice(0, 8);
+
+  return getProds()
+    .filter((p) => {
+      const title = normalizeQuery(p.title);
+      const brand = normalizeQuery(p.brand);
+      const description = normalizeQuery(p.description);
+      return title.includes(query) || brand.includes(query) || description.includes(query);
+    })
+    .slice(0, 8);
 }
 
 function showSuggestions(items) {
@@ -957,25 +980,26 @@ function renderSlidesAdminList() {
     });
   });
 
-  slidesAdminList.querySelectorAll('[data-act="save-slide"]').forEach((btn) => {
-    btn.addEventListener("click", async () => {
-      const index = Number(btn.dataset.index);
-      const titleInput = slidesAdminList.querySelector(`input[data-field="title"][data-index="${index}"]`);
-      const subtitleInput = slidesAdminList.querySelector(`input[data-field="subtitle"][data-index="${index}"]`);
-      const imageInput = slidesAdminList.querySelector(`input[data-field="imageUrl"][data-index="${index}"]`);
+slidesAdminList.querySelectorAll('[data-act="save-slide"]').forEach((btn) => {
+  btn.addEventListener("click", async () => {
+    const index = Number(btn.dataset.index);
+    const titleInput = slidesAdminList.querySelector(`input[data-field="title"][data-index="${index}"]`);
+    const subtitleInput = slidesAdminList.querySelector(`input[data-field="subtitle"][data-index="${index}"]`);
+    const imageInput = slidesAdminList.querySelector(`input[data-field="imageUrl"][data-index="${index}"]`);
 
-      SLIDES[index] = {
-        title: String(titleInput?.value || "").trim(),
-        subtitle: String(subtitleInput?.value || "").trim(),
-        imageUrl: String(imageInput?.value || "").trim()
-      };
+    SLIDES[index] = {
+      title: String(titleInput?.value || "").trim(),
+      subtitle: String(subtitleInput?.value || "").trim(),
+      imageUrl: String(imageInput?.value || "").trim()
+    };
 
-      await saveSlidesToBackend();
-      renderSlider();
-      renderSlidesAdminList();
-      if (slidesAdminHint) slidesAdminHint.textContent = "Слайд збережено.";
-    });
+    await saveSlidesToBackend();
+    await loadSettingsFromBackend();
+    renderSlider();
+    renderSlidesAdminList();
+    if (slidesAdminHint) slidesAdminHint.textContent = "Слайд збережено.";
   });
+});
 
   slidesAdminList.querySelectorAll('[data-act="delete-slide"]').forEach((btn) => {
     btn.addEventListener("click", async () => {
@@ -986,11 +1010,12 @@ function renderSlidesAdminList() {
         return;
       }
 
-      SLIDES.splice(index, 1);
-      await saveSlidesToBackend();
-      renderSlider();
-      renderSlidesAdminList();
-      if (slidesAdminHint) slidesAdminHint.textContent = "Слайд видалено.";
+SLIDES.splice(index, 1);
+await saveSlidesToBackend();
+await loadSettingsFromBackend();
+renderSlider();
+renderSlidesAdminList();
+if (slidesAdminHint) slidesAdminHint.textContent = "Слайд видалено.";
     });
   });
 }
@@ -1002,6 +1027,7 @@ addSlideBtn?.addEventListener("click", async () => {
     imageUrl: ""
   });
   await saveSlidesToBackend();
+  await loadSettingsFromBackend();
   renderSlider();
   renderSlidesAdminList();
 });
@@ -1837,25 +1863,16 @@ async function saveHomeInfoCardsToBackend() {
     console.error("syncFromApi failed:", e);
   }
 
-  applyHeaderSettings();
-  renderCatalog();
-  
-
   try {
-const settings = await api("/settings", { method: "GET" });
-
-if (Array.isArray(settings?.homeInfoCards)) {
-  HOME_INFO_CARDS = settings.homeInfoCards;
-}
-    if (Array.isArray(settings?.homeInfoCards) && settings.homeInfoCards.length) {
-  HOME_INFO_CARDS = settings.homeInfoCards;
-}
+    await loadSettingsFromBackend();
   } catch (e) {
-    console.warn("settings load failed:", e);
+    console.error("loadSettingsFromBackend failed:", e);
   }
 
+  applyHeaderSettings();
+  renderCatalog();
   renderSlider();
-  renderHomeInfoCards(); // renderHomeInfoCards();
+  renderHomeInfoCards();
   updateCartBadge();
   refreshAuthUI();
   initReveal();
