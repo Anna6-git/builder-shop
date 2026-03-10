@@ -28,8 +28,15 @@ async function api(path, options = {}) {
       (data && typeof data === "object" && (data.error || data.message)) ||
       (typeof data === "string" ? data : "") ||
       `HTTP ${res.status}`;
+
+    if (res.status === 401) {
+      token = "";
+      localStorage.removeItem("token");
+    }
+
     throw new Error(msg);
   }
+
   return data;
 }
 
@@ -64,6 +71,7 @@ const pCat = document.getElementById("pCat");
 const pBrand = document.getElementById("pBrand");
 const pPrice = document.getElementById("pPrice");
 const pImg = document.getElementById("pImg");
+const pFile = document.getElementById("pFile");
 const pUnitType = document.getElementById("pUnitType");
 const pStockQty = document.getElementById("pStockQty");
 const pVolume = document.getElementById("pVolume");
@@ -245,7 +253,7 @@ addProductBtn?.addEventListener("click", async () => {
   const catId = Number(pCat.value) || null;
   const brand = pBrand.value.trim();
   const price = Number(pPrice.value);
-  const img = (pImg.value || "").trim();
+  let img = (pImg.value || "").trim();
 
   const unitType = (pUnitType.value || "").trim() || "pcs";
   const stockQty = Number(pStockQty.value);
@@ -261,6 +269,18 @@ addProductBtn?.addEventListener("click", async () => {
   }
 
   try {
+    if (pFile && pFile.files && pFile.files[0]) {
+      const fd = new FormData();
+      fd.append("image", pFile.files[0]);
+
+      const uploaded = await api("/media/upload", {
+        method: "POST",
+        body: fd
+      });
+
+      img = uploaded.url || "";
+    }
+
     await api("/products", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -282,6 +302,7 @@ addProductBtn?.addEventListener("click", async () => {
     pBrand.value = "";
     pPrice.value = "";
     pImg.value = "";
+    if (pFile) pFile.value = "";
     pUnitType.value = "";
     pStockQty.value = "";
     pVolume.value = "";
