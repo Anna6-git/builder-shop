@@ -42,92 +42,6 @@ function makeTransporter() {
   const user = String(process.env.SMTP_USER || "").trim();
   const pass = String(process.env.SMTP_PASS || "").trim();
 
-  async function sendOrderEmails(order, itemsDetailed = []) {
-  const transporter = makeTransporter();
-  if (!transporter) {
-    console.warn("SMTP transporter not configured");
-    return;
-  }
-
-  const adminEmail = String(
-    process.env.ADMIN_NOTIFY_EMAIL || process.env.ADMIN_EMAIL || ""
-  ).trim();
-
-  const from = String(
-    process.env.SMTP_FROM || process.env.SMTP_USER || ""
-  ).trim();
-
-  let total = 0;
-
-  const lines = itemsDetailed.map((it) => {
-    const qty = Number(it.qty || 0);
-    const price = Number(it.price || 0);
-    const sum = qty * price;
-    total += sum;
-
-    return `• ${it.name || "Товар"} — ${qty} × ${price.toFixed(2)} грн = ${sum.toFixed(2)} грн`;
-  });
-
-  const adminText = `
-Нове замовлення №${order.id}
-
-Клієнт: ${order.customerName}
-Телефон: ${order.phone}
-Email: ${order.email}
-Адреса: ${order.address}
-
-Товари:
-${lines.join("\n")}
-
-Сума: ${total.toFixed(2)} грн
-`;
-
-  const customerText = `
-Дякуємо за замовлення у БудМаркет!
-
-Ваше замовлення №${order.id} створено.
-
-Товари:
-${lines.join("\n")}
-
-Сума: ${total.toFixed(2)} грн
-`;
-
-  try {
-    await transporter.verify();
-    console.log("SMTP connection OK");
-  } catch (err) {
-    console.error("SMTP verify failed:", err);
-    return;
-  }
-
-  try {
-    if (adminEmail) {
-      await transporter.sendMail({
-        from,
-        to: adminEmail,
-        subject: `Нове замовлення №${order.id}`,
-        text: adminText,
-      });
-
-      console.log("Admin email sent");
-    }
-
-    if (order.email) {
-      await transporter.sendMail({
-        from,
-        to: order.email,
-        subject: `Ваше замовлення №${order.id}`,
-        text: customerText,
-      });
-
-      console.log("Customer email sent");
-    }
-  } catch (err) {
-    console.error("Email send error:", err);
-  }
-}
-
   if (!host || !user || !pass) {
     console.warn("SMTP config missing:", {
       hasHost: Boolean(host),
@@ -147,9 +61,12 @@ ${lines.join("\n")}
   });
 }
 
-async function sendOrderEmails(order, itemsDetailed) {
+async function sendOrderEmails(order, itemsDetailed = []) {
   const transporter = makeTransporter();
-  if (!transporter) return;
+  if (!transporter) {
+    console.warn("SMTP transporter not configured");
+    return;
+  }
 
   const adminEmail = String(
     process.env.ADMIN_NOTIFY_EMAIL || process.env.ADMIN_EMAIL || ""
