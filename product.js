@@ -52,6 +52,11 @@ function formatPrice(n) {
   return num.toFixed(2);
 }
 
+function priceUnitText(product) {
+  const unit = String(product?.unit || "").trim();
+  return unit ? `за ${unit}` : "за шт";
+}
+
 function formatQty(qty) {
   const n = Number(qty);
   if (!Number.isFinite(n)) return "0";
@@ -119,6 +124,34 @@ function getAdminToken() {
 function isAdmin() {
   const u = getSession();
   return Boolean(getAdminToken()) && u?.role === "admin";
+}
+
+async function api(path, options = {}) {
+  const token = getAdminToken();
+
+  const res = await fetch(`${API_BASE}/api${path}`, {
+    ...options,
+    headers: {
+      ...(options.headers || {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {})
+    }
+  });
+
+  const ct = res.headers.get("content-type") || "";
+  const isJson = ct.includes("application/json");
+  const data = isJson
+    ? await res.json().catch(() => null)
+    : await res.text().catch(() => null);
+
+  if (!res.ok) {
+    const msg =
+      (data && typeof data === "object" && (data.error || data.message)) ||
+      (typeof data === "string" ? data : "") ||
+      `HTTP ${res.status}`;
+    throw new Error(msg);
+  }
+
+  return data;
 }
 
 /* =========================
@@ -329,9 +362,14 @@ saveProductBtn?.addEventListener("click", async () => {
       body: JSON.stringify(payload),
     });
 
-    await syncFromApi();
-    renderCategoryPage();
-    closeProductAdminModal();
+await syncProductsFromApi();
+
+const updated = getProds().find((x) => Number(x.id) === Number(editingProductId));
+if (updated) {
+  renderProduct(updated);
+}
+
+closeProductAdminModal();
   } catch (e) {
     productFormHint.textContent = "Помилка: " + e.message;
   }
@@ -474,9 +512,9 @@ if (addToCartBtn) {
     productMeta.textContent = `${cat ? cat.name : "Категорія"} • ${product.brand || "Без бренду"} • ${stockText}`;
   }
 
-  if (productPrice) {
-    productPrice.textContent = `${formatPrice(product.price)} ₴`;
-  }
+if (productPrice) {
+  productPrice.textContent = `${formatPrice(product.price)} ₴ ${priceUnitText(product)}`;
+}
 
 if (productCode) {
   if (isAdmin()) {
@@ -543,10 +581,12 @@ function renderRelated(product) {
         <img class="prodImg" src="${escapeHTML(productImageSrc(p))}" alt="${escapeHTML(p.title)}">
         <div class="prodBody">
           <h3 class="prodTitle">${escapeHTML(p.title)}</h3>
-          <p class="prodMeta">${escapeHTML(p.brand || "")}</p>
-          <div class="prodBottom">
-            <div class="prodPrice">${formatPrice(p.price)} ₴</div>
-          </div>
+<p class="prodMeta">
+  ${escapeHTML(p.brand || "")}${p.brand ? " • " : ""}${escapeHTML(priceUnitText(p))}
+</p>
+<div class="prodBottom">
+  <div class="prodPrice">${formatPrice(p.price)} ₴</div>
+</div>
         </div>
       </div>
     `;

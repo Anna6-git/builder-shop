@@ -151,8 +151,9 @@ const p = prods.find((x) => Number(x.id) === Number(id));
 if (!p) continue;
 
 const stock = Number(p.stockQty ?? p.stock_qty ?? 0);
+const limitByStock = Number(p.isCustomOrder || 0) !== 1 && p.unitType === "pcs";
 
-if (Number.isFinite(stock) && stock >= 0 && qty > stock) {
+if (limitByStock && Number.isFinite(stock) && stock >= 0 && qty > stock) {
   qty = stock;
 
   const cart = getCart();
@@ -269,21 +270,22 @@ function changeQty(key, delta) {
   const { id } = parseCartKey(key);
   const p = prods.find((x) => Number(x.id) === Number(id));
 
-  if (p) {
-    const stock = Number(p.stockQty ?? p.stock_qty ?? 0);
+if (p) {
+  const stock = Number(p.stockQty ?? p.stock_qty ?? 0);
+  const limitByStock = Number(p.isCustomOrder || 0) !== 1 && p.unitType === "pcs";
 
-    if (Number.isFinite(stock) && stock >= 0) {
-      if (next > stock) {
-        next = stock;
+  if (limitByStock && Number.isFinite(stock) && stock >= 0) {
+    if (next > stock) {
+      next = stock;
 
-        if (cartHint) {
-          const productTitle = p.title || p.name || "товару";
-          checkoutHint.textContent = "";
-          cartHint.textContent = `Для товару "${productTitle}" в наявності ${stock} шт. Можна додати тільки ${stock} шт.`;
-        }
+      if (cartHint) {
+        const productTitle = p.title || p.name || "товару";
+        checkoutHint.textContent = "";
+        cartHint.textContent = `Для товару "${productTitle}" в наявності ${stock} шт. Можна додати тільки ${stock} шт.`;
       }
     }
   }
+}
 
   if (next <= 0) {
     delete cart[key];

@@ -97,6 +97,13 @@ function formatPrice(n) {
   return num.toFixed(2);
 }
 
+function priceUnitText(product) {
+  const unit = String(product?.unit || "").trim();
+  return unit ? `за ${unit}` : "за шт";
+}
+
+
+
 function productImageSrc(p) {
   return p?.img
     ? p.img
@@ -198,10 +205,12 @@ const list = prods
     <img class="prodImg" src="${escapeHTML(productImageSrc(p))}" alt="${escapeHTML(p.title)}">
     <div class="prodBody">
       <h3 class="prodTitle">${escapeHTML(p.title)}</h3>
-      <p class="prodMeta">${escapeHTML(p.brand || "")}</p>
-      <div class="prodBottom">
-        <div class="prodPrice">${formatPrice(p.price)} ₴</div>
-      </div>
+    <p class="prodMeta">
+  ${escapeHTML(p.brand || "")}${p.brand ? " • " : ""}${escapeHTML(priceUnitText(p))}
+</p>
+<div class="prodBottom">
+  <div class="prodPrice">${formatPrice(p.price)} ₴</div>
+</div>
     </div>
   </div>
 
