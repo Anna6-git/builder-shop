@@ -59,7 +59,7 @@ function isAdmin() {
 async function api(path, options = {}) {
   const token = getAdminToken();
 
-  const res = await fetch(`${API_BASE}/api${path}`, {
+const res = await fetch(`${API_BASE}/api${path}`, {
     ...options,
     headers: {
       ...(options.headers || {}),
