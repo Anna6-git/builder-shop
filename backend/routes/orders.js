@@ -26,20 +26,32 @@ function ensureTables(cb) {
         unit TEXT,
         FOREIGN KEY (order_id) REFERENCES orders(id),
         FOREIGN KEY (product_id) REFERENCES products(id)
-      );`
+      );`,
+      (err) => {
+        if (err) return cb(err);
+        cb(null);
+      }
     );
-    cb();
   });
 }
 
 function makeTransporter() {
-  const host = process.env.SMTP_HOST;
+  const host = String(process.env.SMTP_HOST || "").trim();
   const port = Number(process.env.SMTP_PORT || 587);
-  const secure = String(process.env.SMTP_SECURE || "false") === "true";
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
+  const secure = String(process.env.SMTP_SECURE || "false").trim() === "true";
+  const user = String(process.env.SMTP_USER || "").trim();
+  const pass = String(process.env.SMTP_PASS || "").trim();
 
-  if (!host || !user || !pass) return null;
+  if (!host || !user || !pass) {
+    console.warn("SMTP config missing:", {
+      hasHost: Boolean(host),
+      hasUser: Boolean(user),
+      hasPass: Boolean(pass),
+      port,
+      secure,
+    });
+    return null;
+  }
 
   return nodemailer.createTransport({
     host,
@@ -51,20 +63,35 @@ function makeTransporter() {
 
 async function sendOrderEmails(order, itemsDetailed) {
   const transporter = makeTransporter();
-  if (!transporter) {
-    console.warn("⚠️ SMTP not configured, emails skipped");
-    return;
-  }
+  if (!transporter) return;
 
-  const adminEmail = process.env.ADMIN_NOTIFY_EMAIL || process.env.ADMIN_EMAIL;
-  const from = process.env.SMTP_FROM || process.env.SMTP_USER;
+  const adminEmail = String(
+    process.env.ADMIN_NOTIFY_EMAIL || process.env.ADMIN_EMAIL || ""
+  ).trim();
+
+  const from = String(
+    process.env.SMTP_FROM || process.env.SMTP_USER || ""
+  ).trim();
+
+  console.log("MAIL DEBUG:", {
+    from,
+    adminEmail,
+    customerEmail: order.email || "",
+    smtpHost: process.env.SMTP_HOST || "",
+    smtpPort: process.env.SMTP_PORT || "",
+    smtpSecure: process.env.SMTP_SECURE || "",
+    hasUser: Boolean(process.env.SMTP_USER),
+    hasPass: Boolean(process.env.SMTP_PASS),
+  });
 
   let total = 0;
-  const lines = itemsDetailed.map((it) => {
+
+  const lines = (itemsDetailed || []).map((it) => {
     const qty = Number(it.qty || 0);
     const price = Number(it.price || 0);
     const rowSum = qty * price;
     total += rowSum;
+
     return `• ${it.name || "Товар"} — ${qty} ${it.unit || "шт"} × ${price.toFixed(2)} грн = ${rowSum.toFixed(2)} грн`;
   });
 
@@ -100,31 +127,46 @@ async function sendOrderEmails(order, itemsDetailed) {
   ].join("\n");
 
   try {
+    await transporter.verify();
+    console.log("SMTP verify OK");
+  } catch (err) {
+    console.error("SMTP verify failed:", err);
+    return;
+  }
+
+  try {
     if (adminEmail) {
-      await transporter.sendMail({
+      const infoAdmin = await transporter.sendMail({
         from,
         to: adminEmail,
         subject: `Нове замовлення №${order.id} — БудМаркет`,
         text: adminText,
       });
+      console.log("Admin email sent:", infoAdmin.messageId);
+    } else {
+      console.warn("ADMIN_NOTIFY_EMAIL is empty");
     }
 
     if (order.email) {
-      await transporter.sendMail({
+      const infoCustomer = await transporter.sendMail({
         from,
         to: order.email,
         subject: `Ваше замовлення №${order.id} — БудМаркет`,
         text: customerText,
       });
+      console.log("Customer email sent:", infoCustomer.messageId);
+    } else {
+      console.warn("Customer email is empty");
     }
   } catch (err) {
-    console.error("❌ Email send error:", err.message);
+    console.error("Email send error:", err);
   }
 }
 
 // POST /api/orders
 router.post("/", (req, res) => {
   const key = req.headers["x-order-key"];
+
   if (!key || key !== expectedOrderKey()) {
     return res.status(403).json({ error: "Forbidden" });
   }
@@ -158,12 +200,17 @@ router.post("/", (req, res) => {
   for (const it of items) {
     const pid = Number(it.product_id);
     const qty = Number(it.qty);
+
     if (!Number.isInteger(pid) || !Number.isFinite(qty) || qty <= 0) {
       return res.status(400).json({ error: "invalid items format" });
     }
   }
 
-  ensureTables(() => {
+  ensureTables((ensureErr) => {
+    if (ensureErr) {
+      return res.status(500).json({ error: ensureErr.message });
+    }
+
     db.serialize(() => {
       db.run("BEGIN TRANSACTION");
 
@@ -228,8 +275,10 @@ router.post("/", (req, res) => {
                    WHERE id = ?`,
                   [orderId],
                   (eOrder, orderRow) => {
-                    db.run("COMMIT", async (e2) => {
-                      if (e2) return res.status(500).json({ error: e2.message });
+                    db.run("COMMIT", async (eCommit) => {
+                      if (eCommit) {
+                        return res.status(500).json({ error: eCommit.message });
+                      }
 
                       if (!eOrder && orderRow) {
                         await sendOrderEmails(orderRow, itemsDetailed || []);
@@ -256,6 +305,7 @@ router.post("/", (req, res) => {
                 if (!row) return rollback(400, { error: `product ${pid} not found` });
 
                 const stock = Number(row.stock_qty);
+
                 if (!Number.isFinite(stock) || stock < qty) {
                   return rollback(400, { error: `not enough stock for product ${pid}` });
                 }
@@ -306,18 +356,23 @@ router.get("/", auth, (req, res) => {
 
   db.all(sql, params, (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
-    res.json(rows);
+    res.json(rows || []);
   });
 });
 
 // GET /api/orders/:id
 router.get("/:id", auth, (req, res) => {
   const id = Number(req.params.id);
-  if (!Number.isInteger(id)) return res.status(400).json({ error: "invalid id" });
+
+  if (!Number.isInteger(id)) {
+    return res.status(400).json({ error: "invalid id" });
+  }
 
   db.get(
     `SELECT id, customerName, phone, email, address, status, created_at, delivery_date, note
-     FROM orders WHERE id = ? LIMIT 1`,
+     FROM orders
+     WHERE id = ?
+     LIMIT 1`,
     [id],
     (e1, order) => {
       if (e1) return res.status(500).json({ error: e1.message });
@@ -331,7 +386,7 @@ router.get("/:id", auth, (req, res) => {
         [id],
         (e2, items) => {
           if (e2) return res.status(500).json({ error: e2.message });
-          res.json({ ...order, items });
+          res.json({ ...order, items: items || [] });
         }
       );
     }
