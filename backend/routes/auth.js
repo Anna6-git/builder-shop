@@ -4,14 +4,14 @@ const express = require("express");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const router = express.Router();
+
 const db = require("../db");
 
-const JWT_SECRET = process.env.JWT_SECRET || "change_me";
+const JWT_SECRET = process.env.JWT_SECRET || "change_me"; // краще задати в .env
 
 // POST /api/auth/login
 router.post("/login", (req, res) => {
   const { email, password } = req.body || {};
-  console.log("LOGIN HIT ✅", { email, passLen: (password || "").length });
 
   if (!email || !password) {
     return res.status(400).json({ error: "email and password required" });
