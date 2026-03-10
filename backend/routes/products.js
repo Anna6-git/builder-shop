@@ -91,7 +91,7 @@ router.post("/", auth, (req, res) => {
   
   const is_custom_order =
   b.isCustomOrder === 1 || b.is_custom_order === 1 ? 1 : 0;
-
+і
 const custom_note_placeholder = String(
   b.customNotePlaceholder || b.custom_note_placeholder || ""
 ).trim();
@@ -105,16 +105,31 @@ const custom_note_placeholder = String(
   if (!name) return res.status(400).json({ error: "title/name required" });
   if (!Number.isFinite(price) || price < 0) return res.status(400).json({ error: "invalid price" });
 
-  db.run(
-`INSERT INTO products
- (name, price, category_id, description, image_url, brand, unit, unit_type, stock_qty, is_active, is_custom_order, custom_note_placeholder, created_at, updated_at, code, related_ids)
- VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'), ?, ?)`
-[name, price, category_id, description, image_url, brand, unit, unit_type, stock_qty, is_active, is_custom_order, custom_note_placeholder, code, related_ids],
-    function (err) {
-      if (err) return res.status(500).json({ error: err.message });
-      res.json({ ok: true, id: this.lastID });
-    }
-  );
+db.run(
+  `INSERT INTO products
+   (name, price, category_id, description, image_url, brand, unit, unit_type, stock_qty, is_active, is_custom_order, custom_note_placeholder, created_at, updated_at, code, related_ids)
+   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'), ?, ?)`,
+  [
+    name,
+    price,
+    category_id,
+    description,
+    image_url,
+    brand,
+    unit,
+    unit_type,
+    stock_qty,
+    is_active,
+    is_custom_order,
+    custom_note_placeholder,
+    code,
+    related_ids
+  ],
+  function (err) {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ ok: true, id: this.lastID });
+  }
+);
 });
 
 router.patch("/:id", auth, (req, res) => {
