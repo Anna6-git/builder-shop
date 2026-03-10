@@ -53,12 +53,13 @@ function makeTransporter() {
     return null;
   }
 
-  return nodemailer.createTransport({
-    host,
-    port,
-    secure,
-    auth: { user, pass },
-  });
+return nodemailer.createTransport({
+  host,
+  port,
+  secure,
+  auth: { user, pass },
+  family: 4
+});
 }
 
 async function sendOrderEmails(order, itemsDetailed = []) {

@@ -181,14 +181,19 @@ if (limitByStock && Number.isFinite(stock) && stock >= 0 && qty > stock) {
 const stockQtyNum = Number(p.stockQty || 0);
 
 const stockText =
-  typeof p.stockQty !== "undefined"
-    ? isInStock(p)
-      ? `В наявності: ${stockQtyNum}`
-      : "Немає в наявності"
-    : "";
+  Number(p.isCustomOrder || 0) === 1
+    ? "Під замовлення"
+    : typeof p.stockQty !== "undefined"
+      ? isInStock(p)
+        ? `В наявності: ${stockQtyNum}`
+        : "Немає в наявності"
+      : "";
 
 const limitedByStock =
-  p.unitType === "pcs" && Number.isFinite(stockQtyNum) && stockQtyNum >= 0;
+  Number(p.isCustomOrder || 0) !== 1 &&
+  p.unitType === "pcs" &&
+  Number.isFinite(stockQtyNum) &&
+  stockQtyNum >= 0;
 
 const overStock =
   limitedByStock && qty > stockQtyNum;
@@ -327,8 +332,9 @@ if (act === "plus") {
   const cart = getCart();
   const current = Number(cart[key] || 0);
   const stock = Number(p?.stockQty ?? p?.stock_qty ?? 0);
+  const limitByStock = p && Number(p.isCustomOrder || 0) !== 1 && p.unitType === "pcs";
 
-  if (p && Number.isFinite(stock) && stock >= 0 && current >= stock) {
+  if (limitByStock && Number.isFinite(stock) && stock >= 0 && current >= stock) {
     if (cartHint) {
       const productTitle = p.title || p.name || "товару";
       cartHint.textContent = `Для товару "${productTitle}" в наявності ${stock} шт. Можна додати тільки ${stock} шт.`;
@@ -447,15 +453,15 @@ if (selectedDate.getDay() === 0) {
   const p = prods.find((x) => Number(x.id) === Number(id));
   if (!p) continue;
 
-  if (p.unitType === "pcs") {
-    const stock = Number(p.stockQty || 0);
-    if (Number.isFinite(stock) && qty > stock) {
-      const msg = `Для товару "${p.title}" в наявності ${stock} шт. Можна додати тільки ${stock} шт.`;
-      if (cartHint) cartHint.textContent = msg;
-      if (checkoutHint) checkoutHint.textContent = msg;
-      return;
-    }
+if (Number(p.isCustomOrder || 0) !== 1 && p.unitType === "pcs") {
+  const stock = Number(p.stockQty || 0);
+  if (Number.isFinite(stock) && qty > stock) {
+    const msg = `Для товару "${p.title}" в наявності ${stock} шт. Можна додати тільки ${stock} шт.`;
+    if (cartHint) cartHint.textContent = msg;
+    if (checkoutHint) checkoutHint.textContent = msg;
+    return;
   }
+}
 }
 
 for (const [key, qtyRaw] of entries) {

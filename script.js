@@ -1623,10 +1623,6 @@ const payload = {
   unitType: "pcs",
   stockQty: Number(pStockInput.value || 0),
   description: String(pDescInput.value || "").trim(),
-  relatedIds: String(pRelatedInput.value || "")
-    .split(",")
-    .map((x) => Number(String(x).trim()))
-    .filter(Number.isFinite),
   img: String(pImgInput.value || "").trim(),
   isCustomOrder: pOrderTypeInput?.value === "custom" ? 1 : 0,
   customNotePlaceholder: String(pCustomNoteInput?.value || "").trim(),

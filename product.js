@@ -205,10 +205,8 @@ const pCategoryInput = document.getElementById("pCategoryInput");
 const pPriceInput = document.getElementById("pPriceInput");
 const pBrandInput = document.getElementById("pBrandInput");
 const pUnitInput = document.getElementById("pUnitInput");
-const pIdInput = document.getElementById("pIdInput");
 const pStockInput = document.getElementById("pStockInput");
 const pDescInput = document.getElementById("pDescInput");
-const pRelatedInput = document.getElementById("pRelatedInput");
 const pImgInput = document.getElementById("pImgInput");
 const pFileInput = document.getElementById("pFileInput");
 const pPreview = document.getElementById("pPreview");
@@ -220,7 +218,6 @@ const productCustomHint = document.getElementById("productCustomHint");
 const productCustomNoteLabel = document.getElementById("productCustomNoteLabel");
 const productCustomNote = document.getElementById("productCustomNote");
 const pOrderTypeInput = document.getElementById("pOrderTypeInput");
-const pCustomNoteInput = document.getElementById("pCustomNoteInput");
 
 
 function fillProductCategorySelect(selectedId = null) {
@@ -251,10 +248,8 @@ function openProductAdminModal(product) {
   pPriceInput.value = product ? Number(product.price).toFixed(2) : "";
   pBrandInput.value = product?.brand || "";
   pUnitInput.value = product?.unit || "";
-  pIdInput.value = product?.id ? String(product.id) : "";
   pStockInput.value = product ? String(product.stockQty ?? 0) : "0";
   pDescInput.value = product?.description || "";
-  pRelatedInput.value = Array.isArray(product?.relatedIds) ? product.relatedIds.join(",") : "";
   pImgInput.value = product?.img || "";
   pFileInput.value = "";
   productFormHint.textContent = "";
