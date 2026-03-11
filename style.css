@@ -2111,3 +2111,11 @@ body:has(.productPage) .callFabWrap {
   white-space: nowrap !important;
   border: 0 !important;
 }
+#relatedPickerResults .adminRow {
+  grid-template-columns: 1fr auto;
+  align-items: center;
+}
+
+#relatedPickerResults .adminRow img {
+  display: none !important;
+}

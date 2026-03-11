@@ -280,18 +280,17 @@ function renderRelatedPickerResults(query) {
     const alreadyAdded = Array.isArray(CURRENT_PRODUCT.relatedIds)
       && CURRENT_PRODUCT.relatedIds.includes(Number(p.id));
 
-    row.innerHTML = `
-      <img src="${escapeHTML(productImageSrc(p))}" alt="" onerror="this.style.display='none'">
-      <div>
-        <div style="font-weight:900">${escapeHTML(p.title || "")}</div>
-        <div style="font-size:12px;color:#6b7280">
-          ID: ${p.id} • ${escapeHTML(p.brand || "Без бренду")} • ${formatPrice(p.price)} ₴
-        </div>
-      </div>
-      <button class="btnPrimary" type="button" data-add-id="${p.id}" ${alreadyAdded ? "disabled" : ""}>
-        ${alreadyAdded ? "Уже додано" : "Додати"}
-      </button>
-    `;
+row.innerHTML = `
+  <div>
+    <div style="font-weight:900">${escapeHTML(p.title || "")}</div>
+    <div style="font-size:12px;color:#6b7280">
+      ID: ${p.id}${p.brand ? ` • ${escapeHTML(p.brand)}` : ""}${Number.isFinite(Number(p.price)) ? ` • ${formatPrice(p.price)} ₴` : ""}
+    </div>
+  </div>
+  <button class="btnPrimary" type="button" data-add-id="${p.id}" ${alreadyAdded ? "disabled" : ""}>
+    ${alreadyAdded ? "Уже додано" : "Додати"}
+  </button>
+`;
 
     relatedPickerResults.appendChild(row);
   });
@@ -786,11 +785,16 @@ relatedDeleteBtn?.addEventListener("click", async (e) => {
   if (!ok) return;
 
   try {
-    const nextRelated = (Array.isArray(CURRENT_PRODUCT.relatedIds) ? CURRENT_PRODUCT.relatedIds : [])
-      .map(Number)
-      .filter((id) => Number(id) !== Number(p.id));
+    const currentProductId = Number(CURRENT_PRODUCT.id);
 
-    await api(`/products/${CURRENT_PRODUCT.id}`, {
+    const freshBeforeUpdate = getProds().find((x) => Number(x.id) === currentProductId);
+    const currentRelated = Array.isArray(freshBeforeUpdate?.relatedIds)
+      ? freshBeforeUpdate.relatedIds.map(Number).filter(Number.isFinite)
+      : [];
+
+    const nextRelated = currentRelated.filter((id) => Number(id) !== Number(p.id));
+
+    await api(`/products/${currentProductId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ relatedIds: nextRelated }),
@@ -798,9 +802,10 @@ relatedDeleteBtn?.addEventListener("click", async (e) => {
 
     await syncProductsFromApi();
 
-    const freshCurrent = getProds().find((x) => Number(x.id) === Number(CURRENT_PRODUCT.id));
+    const freshCurrent = getProds().find((x) => Number(x.id) === currentProductId);
     if (freshCurrent) {
-      renderProduct(freshCurrent);
+      CURRENT_PRODUCT = freshCurrent;
+      renderRelated(freshCurrent);
     }
   } catch (err) {
     alert("Помилка: " + err.message);
