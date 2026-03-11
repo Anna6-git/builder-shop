@@ -1,7 +1,7 @@
 "use strict";
 
 const express = require("express");
-const nodemailer = require("nodemailer");
+
 const dns = require("dns").promises;
 const router = express.Router();
 
@@ -36,80 +36,23 @@ function ensureTables(cb) {
   });
 }
 
-async function makeTransporter() {
-  const host = String(process.env.SMTP_HOST || "").trim();
-  const port = Number(process.env.SMTP_PORT || 587);
-  const secure = String(process.env.SMTP_SECURE || "false").trim() === "true";
-  const user = String(process.env.SMTP_USER || "").trim();
-  const pass = String(process.env.SMTP_PASS || "").trim();
-
-  if (!host || !user || !pass) {
-    console.warn("SMTP config missing:", {
-      hasHost: Boolean(host),
-      hasUser: Boolean(user),
-      hasPass: Boolean(pass),
-      port,
-      secure,
-    });
-    return null;
-  }
-
-  let ipv4Address = host;
-
-  try {
-    const resolved = await dns.lookup(host, { family: 4 });
-    ipv4Address = resolved.address;
-    console.log("SMTP IPv4 resolved:", { host, ipv4Address });
-  } catch (err) {
-    console.error("SMTP IPv4 lookup failed:", err?.message || err);
-    return null;
-  }
-
-  return nodemailer.createTransport({
-    host: ipv4Address,
-    port,
-    secure,
-    auth: { user, pass },
-    tls: {
-      rejectUnauthorized: false,
-      servername: host
-    },
-    connectionTimeout: 10000,
-    greetingTimeout: 10000,
-    socketTimeout: 15000,
-  });
-}
 
 async function sendOrderEmails(order, itemsDetailed = []) {
-const transporter = await makeTransporter();
-  if (!transporter) {
-    console.warn("SMTP transporter not configured");
-    return;
-  }
-
+  const apiKey = String(process.env.BREVO_API_KEY || "").trim();
+  const senderName = String(process.env.BREVO_SENDER_NAME || "БудМаркет").trim();
+  const senderEmail = String(process.env.BREVO_SENDER_EMAIL || "").trim();
   const adminEmail = String(
     process.env.ADMIN_NOTIFY_EMAIL || process.env.ADMIN_EMAIL || ""
   ).trim();
 
-  const from = String(
-    process.env.SMTP_FROM || process.env.SMTP_USER || ""
-  ).trim();
-
-    if (!from) {
-    console.warn("SMTP_FROM is empty");
+  if (!apiKey || !senderEmail) {
+    console.warn("Brevo API config missing:", {
+      hasApiKey: Boolean(apiKey),
+      hasSenderEmail: Boolean(senderEmail),
+      hasAdminEmail: Boolean(adminEmail),
+    });
     return;
   }
-
-  console.log("MAIL DEBUG:", {
-    from,
-    adminEmail,
-    customerEmail: order.email || "",
-    smtpHost: process.env.SMTP_HOST || "",
-    smtpPort: process.env.SMTP_PORT || "",
-    smtpSecure: process.env.SMTP_SECURE || "",
-    hasUser: Boolean(process.env.SMTP_USER),
-    hasPass: Boolean(process.env.SMTP_PASS),
-  });
 
   let total = 0;
 
@@ -153,33 +96,69 @@ const transporter = await makeTransporter();
     `Ми зв’яжемося з вами найближчим часом.`,
   ].join("\n");
 
+  async function sendViaBrevo({ toEmail, toName, subject, text }) {
+    if (!toEmail) return;
+
+    const res = await fetch("https://api.brevo.com/v3/smtp/email", {
+      method: "POST",
+      headers: {
+        "accept": "application/json",
+        "content-type": "application/json",
+        "api-key": apiKey,
+      },
+      body: JSON.stringify({
+        sender: {
+          name: senderName,
+          email: senderEmail,
+        },
+        to: [
+          {
+            email: toEmail,
+            name: toName || "",
+          },
+        ],
+        subject,
+        textContent: text,
+      }),
+    });
+
+    const data = await res.text().catch(() => "");
+
+    if (!res.ok) {
+      throw new Error(`Brevo HTTP ${res.status}: ${data}`);
+    }
+
+    console.log("Brevo email sent:", {
+      toEmail,
+      subject,
+      response: data,
+    });
+  }
 
   try {
     if (adminEmail) {
-      const infoAdmin = await transporter.sendMail({
-        from,
-        to: adminEmail,
+      await sendViaBrevo({
+        toEmail: adminEmail,
+        toName: "Адміністратор",
         subject: `Нове замовлення №${order.id} — БудМаркет`,
         text: adminText,
       });
-      console.log("Admin email sent:", infoAdmin.messageId);
     } else {
       console.warn("ADMIN_NOTIFY_EMAIL is empty");
     }
 
     if (order.email) {
-      const infoCustomer = await transporter.sendMail({
-        from,
-        to: order.email,
+      await sendViaBrevo({
+        toEmail: order.email,
+        toName: order.customerName || "Клієнт",
         subject: `Ваше замовлення №${order.id} — БудМаркет`,
         text: customerText,
       });
-      console.log("Customer email sent:", infoCustomer.messageId);
     } else {
       console.warn("Customer email is empty");
     }
   } catch (err) {
-    console.error("Email send error:", err);
+    console.error("Brevo send error:", err?.message || err);
   }
 }
 
