@@ -62,6 +62,9 @@ return nodemailer.createTransport({
     rejectUnauthorized: false,
   },
   family: 4,
+  connectionTimeout: 10000,
+  greetingTimeout: 10000,
+  socketTimeout: 15000,
 });
 }
 
@@ -138,13 +141,6 @@ async function sendOrderEmails(order, itemsDetailed = []) {
     `Ми зв’яжемося з вами найближчим часом.`,
   ].join("\n");
 
-  try {
-    await transporter.verify();
-    console.log("SMTP verify OK");
-  } catch (err) {
-    console.error("SMTP verify failed:", err);
-    return;
-  }
 
   try {
     if (adminEmail) {
@@ -287,17 +283,21 @@ router.post("/", (req, res) => {
                    WHERE id = ?`,
                   [orderId],
                   (eOrder, orderRow) => {
-                    db.run("COMMIT", async (eCommit) => {
-                      if (eCommit) {
-                        return res.status(500).json({ error: eCommit.message });
-                      }
+                  db.run("COMMIT", (eCommit) => {
+  if (eCommit) {
+    return res.status(500).json({ error: eCommit.message });
+  }
 
-                      if (!eOrder && orderRow) {
-                        await sendOrderEmails(orderRow, itemsDetailed || []);
-                      }
+  res.json({ ok: true, id: orderId });
 
-                      return res.json({ ok: true, id: orderId });
-                    });
+  if (!eOrder && orderRow) {
+    setTimeout(() => {
+      sendOrderEmails(orderRow, itemsDetailed || []).catch((err) => {
+        console.error("Background email error:", err?.message || err);
+      });
+    }, 0);
+  }
+});
                   }
                 );
               }
