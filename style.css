@@ -1423,10 +1423,10 @@ body.miniModalOpen {
    CALL FAB
 ========================= */
 .callFabWrap {
-  position: fixed;
-  left: 20px;
-  bottom: 100px;
-  z-index: 1300;
+  position: fixed !important;
+  left: 20px !important;
+  bottom: 210px !important;
+  z-index: 1300 !important;
   display: flex;
   flex-direction: column-reverse;
   align-items: flex-start;
@@ -2077,4 +2077,9 @@ body.modalOpen .checkoutModal {
 
 .relatedHead .sectionTitle {
   margin: 0;
+}
+
+.productPage .callFabWrap,
+body:has(.productPage) .callFabWrap {
+  bottom: 230px !important;
 }

@@ -167,6 +167,27 @@
   </div>
 </div>
 
+<div class="authOverlay" id="relatedPickerOverlay" hidden></div>
+<div class="authModal adminModal" id="relatedPickerModal" aria-hidden="true" hidden>
+  <div class="authTop">
+    <div class="authTitle">Додати товар у пов’язані</div>
+    <button class="authClose" id="relatedPickerClose" type="button">✕</button>
+  </div>
+
+  <div class="authBody">
+    <label class="authLabel">Пошук за ID або назвою</label>
+    <input
+      class="authInput"
+      id="relatedPickerSearch"
+      placeholder="Наприклад: 15 або Газобетон"
+      type="text"
+    >
+
+    <div class="authHint" id="relatedPickerHint"></div>
+    <div id="relatedPickerResults" class="adminList"></div>
+  </div>
+</div>
+
 <script src="config.js"></script>
 <script src="product.js"></script>
 </body>

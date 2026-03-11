@@ -180,6 +180,12 @@ const addToCartBtn = document.getElementById("addToCartBtn");
 
 const relatedGrid = document.getElementById("relatedGrid");
 const addRelatedProductBtn = document.getElementById("addRelatedProductBtn");
+const relatedPickerOverlay = document.getElementById("relatedPickerOverlay");
+const relatedPickerModal = document.getElementById("relatedPickerModal");
+const relatedPickerClose = document.getElementById("relatedPickerClose");
+const relatedPickerSearch = document.getElementById("relatedPickerSearch");
+const relatedPickerHint = document.getElementById("relatedPickerHint");
+const relatedPickerResults = document.getElementById("relatedPickerResults");
 
 let CURRENT_PRODUCT = null;
 
@@ -213,54 +219,122 @@ function goBackSmart() {
 
 productBackBtn?.addEventListener("click", goBackSmart);
 addRelatedProductBtn?.addEventListener("click", () => {
-  openCreateProductModal();
+  openRelatedPicker();
 });
 
 let editingProductId = null;
 
-function openCreateProductModal() {
-  if (!isAdmin()) return;
-
-  editingProductId = null;
-  adminProductTitle.textContent = "Додати товар";
-
-  fillProductCategorySelect(CURRENT_PRODUCT?.catId || null);
-
-  pTitleInput.value = "";
-  pPriceInput.value = "";
-  pBrandInput.value = "";
-  pUnitInput.value = "шт";
-  pStockInput.value = "0";
-  pDescInput.value = "";
-  pImgInput.value = "";
-  pFileInput.value = "";
-  productFormHint.textContent = "";
-
-  if (pIdInput) {
-    pIdInput.value = "";
-  }
-
-  if (pOrderTypeInput) {
-    pOrderTypeInput.value = "stock";
-  }
-
-  if (pRelatedInput) {
-    pRelatedInput.value = "";
-  }
-
-  if (pPreview) {
-    pPreview.hidden = true;
-    pPreview.removeAttribute("src");
-  }
-
-  if (deleteProductBtn) {
-    deleteProductBtn.hidden = true;
-  }
-
-  adminProductOverlay.hidden = false;
-  adminProductModal.hidden = false;
-  adminProductModal.setAttribute("aria-hidden", "false");
+function closeRelatedPicker() {
+  relatedPickerModal?.setAttribute("aria-hidden", "true");
+  if (relatedPickerOverlay) relatedPickerOverlay.hidden = true;
+  if (relatedPickerModal) relatedPickerModal.hidden = true;
+  if (relatedPickerSearch) relatedPickerSearch.value = "";
+  if (relatedPickerHint) relatedPickerHint.textContent = "";
+  if (relatedPickerResults) relatedPickerResults.innerHTML = "";
 }
+
+function openRelatedPicker() {
+  if (!isAdmin() || !CURRENT_PRODUCT) return;
+
+  relatedPickerModal?.setAttribute("aria-hidden", "false");
+  if (relatedPickerOverlay) relatedPickerOverlay.hidden = false;
+  if (relatedPickerModal) relatedPickerModal.hidden = false;
+  if (relatedPickerSearch) relatedPickerSearch.value = "";
+  if (relatedPickerHint) relatedPickerHint.textContent = "";
+  renderRelatedPickerResults("");
+  setTimeout(() => relatedPickerSearch?.focus(), 50);
+}
+
+function renderRelatedPickerResults(query) {
+  if (!relatedPickerResults || !CURRENT_PRODUCT) return;
+
+  const currentId = Number(CURRENT_PRODUCT.id);
+  const q = String(query || "").trim().toLowerCase();
+
+  const all = getProds().filter((p) => Number(p.id) !== currentId);
+
+  let list = all;
+
+  if (q) {
+    const qNum = Number(q);
+    list = all.filter((p) => {
+      const byId = Number.isFinite(qNum) && Number(p.id) === qNum;
+      const byTitle = String(p.title || "").toLowerCase().includes(q);
+      return byId || byTitle;
+    });
+  }
+
+  list = list.slice(0, 20);
+
+  relatedPickerResults.innerHTML = "";
+
+  if (!list.length) {
+    relatedPickerResults.innerHTML = `<div class="hint">Нічого не знайдено.</div>`;
+    return;
+  }
+
+  list.forEach((p) => {
+    const row = document.createElement("div");
+    row.className = "adminRow";
+
+    const alreadyAdded = Array.isArray(CURRENT_PRODUCT.relatedIds)
+      && CURRENT_PRODUCT.relatedIds.includes(Number(p.id));
+
+    row.innerHTML = `
+      <img src="${escapeHTML(productImageSrc(p))}" alt="" onerror="this.style.display='none'">
+      <div>
+        <div style="font-weight:900">${escapeHTML(p.title || "")}</div>
+        <div style="font-size:12px;color:#6b7280">
+          ID: ${p.id} • ${escapeHTML(p.brand || "Без бренду")} • ${formatPrice(p.price)} ₴
+        </div>
+      </div>
+      <button class="btnPrimary" type="button" data-add-id="${p.id}" ${alreadyAdded ? "disabled" : ""}>
+        ${alreadyAdded ? "Уже додано" : "Додати"}
+      </button>
+    `;
+
+    relatedPickerResults.appendChild(row);
+  });
+}
+
+async function addRelatedProductById(relatedId) {
+  if (!CURRENT_PRODUCT || !isAdmin()) return;
+
+  const currentRelated = Array.isArray(CURRENT_PRODUCT.relatedIds)
+    ? CURRENT_PRODUCT.relatedIds.map(Number).filter(Number.isFinite)
+    : [];
+
+  if (currentRelated.includes(Number(relatedId))) {
+    if (relatedPickerHint) relatedPickerHint.textContent = "Цей товар уже додано.";
+    return;
+  }
+
+  const nextRelated = [...currentRelated, Number(relatedId)];
+
+  try {
+    if (relatedPickerHint) relatedPickerHint.textContent = "Додаю...";
+
+    await api(`/products/${CURRENT_PRODUCT.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ relatedIds: nextRelated }),
+    });
+
+    await syncProductsFromApi();
+
+    const fresh = getProds().find((x) => Number(x.id) === Number(CURRENT_PRODUCT.id));
+    if (fresh) {
+      renderProduct(fresh);
+    }
+
+    if (relatedPickerHint) relatedPickerHint.textContent = "Товар додано.";
+    renderRelatedPickerResults(relatedPickerSearch?.value || "");
+  } catch (err) {
+    if (relatedPickerHint) relatedPickerHint.textContent = "Помилка: " + err.message;
+  }
+}
+
+
 
 const adminProductOverlay = document.getElementById("adminProductOverlay");
 const adminProductModal = document.getElementById("adminProductModal");
@@ -369,6 +443,22 @@ function closeProductAdminModal() {
 
 adminProductClose?.addEventListener("click", closeProductAdminModal);
 adminProductOverlay?.addEventListener("click", closeProductAdminModal);
+relatedPickerClose?.addEventListener("click", closeRelatedPicker);
+relatedPickerOverlay?.addEventListener("click", closeRelatedPicker);
+
+relatedPickerSearch?.addEventListener("input", () => {
+  renderRelatedPickerResults(relatedPickerSearch.value);
+});
+
+relatedPickerResults?.addEventListener("click", async (e) => {
+  const btn = e.target.closest("[data-add-id]");
+  if (!btn) return;
+
+  const relatedId = Number(btn.dataset.addId);
+  if (!Number.isFinite(relatedId)) return;
+
+  await addRelatedProductById(relatedId);
+});
 
 pImgInput?.addEventListener("input", () => {
   const url = (pImgInput.value || "").trim();
@@ -685,28 +775,37 @@ function renderRelated(product) {
       window.location.href = `product.html?id=${p.id}`;
     });
 
-    const relatedDeleteBtn = card.querySelector(".relatedDeleteBtn");
-    relatedDeleteBtn?.addEventListener("click", async (e) => {
-      e.preventDefault();
-      e.stopPropagation();
+const relatedDeleteBtn = card.querySelector(".relatedDeleteBtn");
+relatedDeleteBtn?.addEventListener("click", async (e) => {
+  e.preventDefault();
+  e.stopPropagation();
 
-      const ok = confirm(`Видалити товар "${p.title}"?`);
-      if (!ok) return;
+  if (!CURRENT_PRODUCT) return;
 
-      try {
-        await api(`/products/${p.id}`, { method: "DELETE" });
-        await syncProductsFromApi();
+  const ok = confirm(`Прибрати "${p.title}" з пов’язаних товарів?`);
+  if (!ok) return;
 
-        const freshCurrent = getProds().find((x) => Number(x.id) === Number(product.id));
-        if (freshCurrent) {
-          renderRelated(freshCurrent);
-        } else {
-          goBackSmart();
-        }
-      } catch (err) {
-        alert("Помилка: " + err.message);
-      }
+  try {
+    const nextRelated = (Array.isArray(CURRENT_PRODUCT.relatedIds) ? CURRENT_PRODUCT.relatedIds : [])
+      .map(Number)
+      .filter((id) => Number(id) !== Number(p.id));
+
+    await api(`/products/${CURRENT_PRODUCT.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ relatedIds: nextRelated }),
     });
+
+    await syncProductsFromApi();
+
+    const freshCurrent = getProds().find((x) => Number(x.id) === Number(CURRENT_PRODUCT.id));
+    if (freshCurrent) {
+      renderProduct(freshCurrent);
+    }
+  } catch (err) {
+    alert("Помилка: " + err.message);
+  }
+});
 
     relatedGrid.appendChild(card);
   });

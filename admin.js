@@ -69,6 +69,7 @@ const catsList = document.getElementById("catsList");
 // prods
 const pTitle = document.getElementById("pTitle");
 const pCat = document.getElementById("pCat");
+const pCatList = document.getElementById("pCatList");
 const pBrand = document.getElementById("pBrand");
 const pPrice = document.getElementById("pPrice");
 const pImg = document.getElementById("pImg");
@@ -245,19 +246,25 @@ function renderCats() {
 
 function renderCatSelect() {
   const cats = Array.isArray(CATEGORIES) ? CATEGORIES : [];
-  pCat.innerHTML = "";
+  if (!pCatList) return;
+
+  pCatList.innerHTML = "";
+
   cats.forEach((c) => {
     const opt = document.createElement("option");
-    opt.value = String(c.id);
-    opt.textContent = c.name;
-    pCat.appendChild(opt);
+    opt.value = c.name;
+    pCatList.appendChild(opt);
   });
 }
 
 /* ===================== PRODUCTS ===================== */
 addProductBtn?.addEventListener("click", async () => {
   const title = pTitle.value.trim();
-  const catId = Number(pCat.value) || null;
+const catName = (pCat.value || "").trim();
+const matchedCat = CATEGORIES.find(
+  (c) => String(c.name || "").trim().toLowerCase() === catName.toLowerCase()
+);
+const catId = matchedCat ? Number(matchedCat.id) : null;
   const brand = pBrand.value.trim();
   const price = Number(pPrice.value);
   let img = (pImg.value || "").trim();
@@ -276,6 +283,9 @@ addProductBtn?.addEventListener("click", async () => {
   if (!title) {
     return alert("Введіть назву товару");
   }
+  if (!catId) {
+  return alert("Оберіть категорію зі списку");
+}
 
   if (!brand) {
     return alert("Введіть виробника");
