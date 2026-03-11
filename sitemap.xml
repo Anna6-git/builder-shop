@@ -1,12 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://builder-shop-production.up.railway.app/</loc>
+    <loc>https://anna6-git.github.io/builder-shop/</loc>
   </url>
   <url>
-    <loc>https://builder-shop-production.up.railway.app/index.html</loc>
+    <loc>https://anna6-git.github.io/builder-shop/index.html</loc>
   </url>
   <url>
-    <loc>https://builder-shop-production.up.railway.app/cart.html</loc>
+    <loc>https://anna6-git.github.io/builder-shop/cart.html</loc>
+  </url>
+  <url>
+    <loc>https://anna6-git.github.io/builder-shop/category.html</loc>
+  </url>
+  <url>
+    <loc>https://anna6-git.github.io/builder-shop/product.html</loc>
   </url>
 </urlset>

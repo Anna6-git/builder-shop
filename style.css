@@ -1425,7 +1425,7 @@ body.miniModalOpen {
 .callFabWrap {
   position: fixed !important;
   left: 20px !important;
-  bottom: 210px !important;
+  bottom: 20px !important;
   z-index: 1300 !important;
   display: flex;
   flex-direction: column-reverse;
@@ -2082,4 +2082,21 @@ body.modalOpen .checkoutModal {
 .productPage .callFabWrap,
 body:has(.productPage) .callFabWrap {
   bottom: 230px !important;
+}
+
+.seoIntro {
+  padding: 0 16px 16px;
+}
+
+.seoTitle {
+  font-size: 28px;
+  font-weight: 900;
+  margin: 0 0 10px;
+  color: #111827;
+}
+
+.seoText {
+  margin: 0 0 8px;
+  color: #374151;
+  line-height: 1.5;
 }

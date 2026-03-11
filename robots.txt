@@ -1,2 +1,4 @@
 User-agent: *
 Allow: /
+
+Sitemap: https://anna6-git.github.io/builder-shop/sitemap.xml
