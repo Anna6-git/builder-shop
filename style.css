@@ -1424,8 +1424,8 @@ body.miniModalOpen {
 ========================= */
 .callFabWrap {
   position: fixed;
-  left: 14px;
-  bottom: 76px;
+  left: 20px;
+  bottom: 100px;
   z-index: 1300;
   display: flex;
   flex-direction: column-reverse;
@@ -1964,9 +1964,7 @@ body.modalOpen .checkoutModal {
     grid-template-columns: 1fr 1fr;
   }
 
-  .bottomNav {
-    display: none;
-  }
+
 
   .cartRow {
     grid-template-columns: 90px 1fr 140px 160px 120px 56px;
@@ -2062,4 +2060,21 @@ body.modalOpen .checkoutModal {
 .relatedDeleteBtn {
   margin-top: 10px;
   width: 100%;
+}
+
+.bottomNav,
+.bottomNav * {
+  display: none !important;
+  visibility: hidden !important;
+}
+.relatedHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.relatedHead .sectionTitle {
+  margin: 0;
 }

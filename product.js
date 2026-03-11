@@ -179,6 +179,7 @@ const addToCartBtn = document.getElementById("addToCartBtn");
 
 
 const relatedGrid = document.getElementById("relatedGrid");
+const addRelatedProductBtn = document.getElementById("addRelatedProductBtn");
 
 let CURRENT_PRODUCT = null;
 
@@ -211,8 +212,55 @@ function goBackSmart() {
 }
 
 productBackBtn?.addEventListener("click", goBackSmart);
+addRelatedProductBtn?.addEventListener("click", () => {
+  openCreateProductModal();
+});
 
 let editingProductId = null;
+
+function openCreateProductModal() {
+  if (!isAdmin()) return;
+
+  editingProductId = null;
+  adminProductTitle.textContent = "Додати товар";
+
+  fillProductCategorySelect(CURRENT_PRODUCT?.catId || null);
+
+  pTitleInput.value = "";
+  pPriceInput.value = "";
+  pBrandInput.value = "";
+  pUnitInput.value = "шт";
+  pStockInput.value = "0";
+  pDescInput.value = "";
+  pImgInput.value = "";
+  pFileInput.value = "";
+  productFormHint.textContent = "";
+
+  if (pIdInput) {
+    pIdInput.value = "";
+  }
+
+  if (pOrderTypeInput) {
+    pOrderTypeInput.value = "stock";
+  }
+
+  if (pRelatedInput) {
+    pRelatedInput.value = "";
+  }
+
+  if (pPreview) {
+    pPreview.hidden = true;
+    pPreview.removeAttribute("src");
+  }
+
+  if (deleteProductBtn) {
+    deleteProductBtn.hidden = true;
+  }
+
+  adminProductOverlay.hidden = false;
+  adminProductModal.hidden = false;
+  adminProductModal.setAttribute("aria-hidden", "false");
+}
 
 const adminProductOverlay = document.getElementById("adminProductOverlay");
 const adminProductModal = document.getElementById("adminProductModal");
@@ -297,6 +345,12 @@ function openProductAdminModal(product) {
     pPreview.removeAttribute("src");
   }
 
+    if (deleteProductBtn) {
+    deleteProductBtn.hidden = false;
+  }
+
+  adminProductModal.setAttribute("aria-hidden", "false");
+
   adminProductOverlay.hidden = false;
   adminProductModal.hidden = false;
 }
@@ -307,6 +361,10 @@ function closeProductAdminModal() {
   adminProductModal.hidden = true;
   editingProductId = null;
   productFormHint.textContent = "";
+
+  if (deleteProductBtn) {
+    deleteProductBtn.hidden = false;
+  }
 }
 
 adminProductClose?.addEventListener("click", closeProductAdminModal);
@@ -355,8 +413,6 @@ pFileInput?.addEventListener("change", async () => {
 });
 
 saveProductBtn?.addEventListener("click", async () => {
-  if (!editingProductId) return;
-
   try {
     const relatedIds = String(pRelatedInput?.value || "")
       .split(",")
@@ -388,22 +444,37 @@ saveProductBtn?.addEventListener("click", async () => {
       return;
     }
 
-    productFormHint.textContent = "Зберігаю...";
+    productFormHint.textContent = editingProductId ? "Зберігаю..." : "Створюю...";
 
-    await api(`/products/${editingProductId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
+    if (editingProductId) {
+      await api(`/products/${editingProductId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    } else {
+      await api(`/products`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    }
 
-await syncProductsFromApi();
+    await syncProductsFromApi();
 
-const updated = getProds().find((x) => Number(x.id) === Number(editingProductId));
-if (updated) {
-  renderProduct(updated);
-}
+    if (editingProductId) {
+      const updated = getProds().find((x) => Number(x.id) === Number(editingProductId));
+      if (updated) {
+        renderProduct(updated);
+      }
+    } else if (CURRENT_PRODUCT) {
+      const freshCurrent = getProds().find((x) => Number(x.id) === Number(CURRENT_PRODUCT.id));
+      if (freshCurrent) {
+        renderRelated(freshCurrent);
+      }
+    }
 
-closeProductAdminModal();
+    closeProductAdminModal();
   } catch (e) {
     productFormHint.textContent = "Помилка: " + e.message;
   }
@@ -495,6 +566,7 @@ if (productCustomNote) {
 
   if (productEditBtn) productEditBtn.hidden = !isAdmin();
 if (productDeleteBtn) productDeleteBtn.hidden = !isAdmin();
+if (addRelatedProductBtn) addRelatedProductBtn.hidden = !isAdmin();
 
 
 
