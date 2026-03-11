@@ -2,7 +2,7 @@ const API_BASE = window.API_BASE || "http://localhost:3001";
 
 /* ===================== AUTH + API ===================== */
 function getToken() {
-  return localStorage.getItem("token") || "";
+  return localStorage.getItem("admin_token") || "";
 }
 
 function authHeaders() {
@@ -30,9 +30,10 @@ async function api(path, options = {}) {
       `HTTP ${res.status}`;
 
     if (res.status === 401) {
-      token = "";
-      localStorage.removeItem("token");
-    }
+  token = "";
+  localStorage.removeItem("admin_token");
+  localStorage.removeItem("current_user");
+}
 
     throw new Error(msg);
   }
@@ -43,7 +44,7 @@ async function api(path, options = {}) {
 
 
 /* ===================== UI ===================== */
-let token = localStorage.getItem("token") || "";
+let token = localStorage.getItem("admin_token") || "";
 
 // UI
 const loginBox = document.getElementById("loginBox");
@@ -72,10 +73,12 @@ const pBrand = document.getElementById("pBrand");
 const pPrice = document.getElementById("pPrice");
 const pImg = document.getElementById("pImg");
 const pFile = document.getElementById("pFile");
+const pUnit = document.getElementById("pUnit");
 const pUnitType = document.getElementById("pUnitType");
 const pStockQty = document.getElementById("pStockQty");
-const pVolume = document.getElementById("pVolume");
-const pWeight = document.getElementById("pWeight");
+const pDescription = document.getElementById("pDescription");
+const pIsCustomOrder = document.getElementById("pIsCustomOrder");
+const pRelatedIds = document.getElementById("pRelatedIds");
 const addProductBtn = document.getElementById("addProductBtn");
 const prodsList = document.getElementById("prodsList");
 
@@ -108,7 +111,8 @@ tabProds?.addEventListener("click", () => setTab("prods"));
 
 logoutBtn?.addEventListener("click", () => {
   token = "";
-  localStorage.removeItem("token");
+  localStorage.removeItem("admin_token");
+  localStorage.removeItem("current_user");
   showLogin();
 });
 
@@ -134,9 +138,12 @@ loginBtn?.addEventListener("click", async () => {
     });
 
     if (!data?.token) throw new Error("Токен не отримано");
+    if (data?.user) {
+  localStorage.setItem("current_user", JSON.stringify(data.user));
+}
 
     token = data.token;
-    localStorage.setItem("token", token);
+    localStorage.setItem("admin_token", token);
     showPanel();
   } catch (e) {
     alert("Помилка входу: " + e.message);
@@ -255,15 +262,29 @@ addProductBtn?.addEventListener("click", async () => {
   const price = Number(pPrice.value);
   let img = (pImg.value || "").trim();
 
-  const unitType = (pUnitType.value || "").trim() || "pcs";
-  const stockQty = Number(pStockQty.value);
+  const unit = (pUnit.value || "").trim() || "шт";
+  const unitType = (pUnitType.value || "pcs").trim();
+  const stockQty = Number(pStockQty.value || 0);
+  const description = (pDescription.value || "").trim();
+  const isCustomOrder = Number(pIsCustomOrder.value || 0);
 
-  const volume_m3 = pVolume.value === "" ? null : Number(pVolume.value);
-  const weight_kg = pWeight.value === "" ? null : Number(pWeight.value);
+  const relatedIds = (pRelatedIds.value || "")
+    .split(",")
+    .map((x) => Number(x.trim()))
+    .filter(Number.isFinite);
 
-  if (!title || !brand || !(price > 0)) {
-    return alert("Заповніть: назва, виробник, ціна (>0)");
+  if (!title) {
+    return alert("Введіть назву товару");
   }
+
+  if (!brand) {
+    return alert("Введіть виробника");
+  }
+
+  if (!Number.isFinite(price) || price <= 0) {
+    return alert("Ціна має бути більше 0");
+  }
+
   if (!Number.isFinite(stockQty) || stockQty < 0) {
     return alert("Кількість на складі має бути числом ≥ 0");
   }
@@ -275,7 +296,7 @@ addProductBtn?.addEventListener("click", async () => {
 
       const uploaded = await api("/media/upload", {
         method: "POST",
-        body: fd
+        body: fd,
       });
 
       img = uploaded.url || "";
@@ -290,11 +311,13 @@ addProductBtn?.addEventListener("click", async () => {
         catId,
         brand,
         img,
+        unit,
         unitType,
         stockQty,
-        volume_m3,
-        weight_kg,
+        description,
         isActive: 1,
+        isCustomOrder,
+        relatedIds,
       }),
     });
 
@@ -303,10 +326,12 @@ addProductBtn?.addEventListener("click", async () => {
     pPrice.value = "";
     pImg.value = "";
     if (pFile) pFile.value = "";
-    pUnitType.value = "";
+    pUnit.value = "";
+    pUnitType.value = "pcs";
     pStockQty.value = "";
-    pVolume.value = "";
-    pWeight.value = "";
+    pDescription.value = "";
+    pIsCustomOrder.value = "0";
+    pRelatedIds.value = "";
 
     await refreshAll();
   } catch (e) {
@@ -396,7 +421,7 @@ function renderProds() {
       return;
     } catch {
       token = "";
-      localStorage.removeItem("token");
+      localStorage.removeItem("admin_token");
     }
   }
   showLogin();

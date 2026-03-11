@@ -182,6 +182,25 @@ const relatedGrid = document.getElementById("relatedGrid");
 
 let CURRENT_PRODUCT = null;
 
+productEditBtn?.addEventListener("click", () => {
+  if (!CURRENT_PRODUCT || !isAdmin()) return;
+  openProductAdminModal(CURRENT_PRODUCT);
+});
+
+productDeleteBtn?.addEventListener("click", async () => {
+  if (!CURRENT_PRODUCT || !isAdmin()) return;
+
+  const ok = confirm("Видалити товар?");
+  if (!ok) return;
+
+  try {
+    await api(`/products/${CURRENT_PRODUCT.id}`, { method: "DELETE" });
+    goBackSmart();
+  } catch (err) {
+    alert("Помилка: " + err.message);
+  }
+});
+
 
 function goBackSmart() {
   if (document.referrer && document.referrer !== window.location.href) {
@@ -218,6 +237,8 @@ const productCustomHint = document.getElementById("productCustomHint");
 const productCustomNoteLabel = document.getElementById("productCustomNoteLabel");
 const productCustomNote = document.getElementById("productCustomNote");
 const pOrderTypeInput = document.getElementById("pOrderTypeInput");
+const pRelatedInput = document.getElementById("pRelatedInput");
+const pIdInput = document.getElementById("pIdInput");
 
 
 function fillProductCategorySelect(selectedId = null) {
@@ -254,6 +275,20 @@ function openProductAdminModal(product) {
   pFileInput.value = "";
   productFormHint.textContent = "";
 
+  if (pIdInput) {
+    pIdInput.value = product?.id ?? "";
+  }
+
+  if (pOrderTypeInput) {
+    pOrderTypeInput.value = Number(product?.isCustomOrder || 0) === 1 ? "custom" : "stock";
+  }
+
+  if (pRelatedInput) {
+    pRelatedInput.value = Array.isArray(product?.relatedIds)
+      ? product.relatedIds.join(",")
+      : "";
+  }
+
   if (product?.img) {
     pPreview.src = product.img;
     pPreview.hidden = false;
@@ -271,6 +306,7 @@ function closeProductAdminModal() {
   adminProductOverlay.hidden = true;
   adminProductModal.hidden = true;
   editingProductId = null;
+  productFormHint.textContent = "";
 }
 
 adminProductClose?.addEventListener("click", closeProductAdminModal);
@@ -322,6 +358,11 @@ saveProductBtn?.addEventListener("click", async () => {
   if (!editingProductId) return;
 
   try {
+    const relatedIds = String(pRelatedInput?.value || "")
+      .split(",")
+      .map((x) => Number(x.trim()))
+      .filter(Number.isFinite);
+
     const payload = {
       title: String(pTitleInput.value || "").trim(),
       catId: Number(pCategoryInput.value),
@@ -331,9 +372,10 @@ saveProductBtn?.addEventListener("click", async () => {
       unitType: "pcs",
       stockQty: Number(pStockInput.value || 0),
       description: String(pDescInput.value || "").trim(),
- 
       img: String(pImgInput.value || "").trim(),
-      isActive: 1
+      isActive: 1,
+      isCustomOrder: pOrderTypeInput?.value === "custom" ? 1 : 0,
+      relatedIds
     };
 
     if (!payload.title) {
@@ -375,10 +417,9 @@ deleteProductBtn?.addEventListener("click", async () => {
 
   try {
     await api(`/products/${editingProductId}`, { method: "DELETE" });
-await syncProductsFromApi();
-const updated = getProds().find((x) => Number(x.id) === Number(editingProductId));
-if (updated) renderProduct(updated);
-closeProductAdminModal();
+    await syncProductsFromApi();
+    closeProductAdminModal();
+    goBackSmart();
   } catch (e) {
     productFormHint.textContent = "Помилка: " + e.message;
   }
@@ -455,24 +496,7 @@ if (productCustomNote) {
   if (productEditBtn) productEditBtn.hidden = !isAdmin();
 if (productDeleteBtn) productDeleteBtn.hidden = !isAdmin();
 
-productEditBtn?.addEventListener("click", () => {
-  if (!CURRENT_PRODUCT || !isAdmin()) return;
-  openProductAdminModal(CURRENT_PRODUCT);
-});
 
-productDeleteBtn?.addEventListener("click", async () => {
-  if (!CURRENT_PRODUCT || !isAdmin()) return;
-
-  const ok = confirm("Видалити товар?");
-  if (!ok) return;
-
-  try {
-    await api(`/products/${CURRENT_PRODUCT.id}`, { method: "DELETE" });
-    goBackSmart();
-  } catch (err) {
-    alert("Помилка: " + err.message);
-  }
-});
 
   if (productImg) {
     productImg.src = productImageSrc(product);
@@ -573,18 +597,43 @@ function renderRelated(product) {
         <img class="prodImg" src="${escapeHTML(productImageSrc(p))}" alt="${escapeHTML(p.title)}">
         <div class="prodBody">
           <h3 class="prodTitle">${escapeHTML(p.title)}</h3>
-<p class="prodMeta">
-  ${escapeHTML(p.brand || "")}${p.brand ? " • " : ""}${escapeHTML(priceUnitText(p))}
-</p>
-<div class="prodBottom">
-  <div class="prodPrice">${formatPrice(p.price)} ₴</div>
-</div>
+          <p class="prodMeta">
+            ${escapeHTML(p.brand || "")}${p.brand ? " • " : ""}${escapeHTML(priceUnitText(p))}
+          </p>
+          <div class="prodBottom">
+            <div class="prodPrice">${formatPrice(p.price)} ₴</div>
+          </div>
+          ${isAdmin() ? `<button class="btnDanger relatedDeleteBtn" type="button" data-id="${p.id}">Видалити</button>` : ""}
         </div>
       </div>
     `;
 
-    card.querySelector(".prodCard__main")?.addEventListener("click", () => {
+    card.querySelector(".prodCard__main")?.addEventListener("click", (e) => {
+      if (e.target.closest(".relatedDeleteBtn")) return;
       window.location.href = `product.html?id=${p.id}`;
+    });
+
+    const relatedDeleteBtn = card.querySelector(".relatedDeleteBtn");
+    relatedDeleteBtn?.addEventListener("click", async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const ok = confirm(`Видалити товар "${p.title}"?`);
+      if (!ok) return;
+
+      try {
+        await api(`/products/${p.id}`, { method: "DELETE" });
+        await syncProductsFromApi();
+
+        const freshCurrent = getProds().find((x) => Number(x.id) === Number(product.id));
+        if (freshCurrent) {
+          renderRelated(freshCurrent);
+        } else {
+          goBackSmart();
+        }
+      } catch (err) {
+        alert("Помилка: " + err.message);
+      }
     });
 
     relatedGrid.appendChild(card);

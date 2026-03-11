@@ -58,7 +58,10 @@ return nodemailer.createTransport({
   port,
   secure,
   auth: { user, pass },
-  family: 4
+  tls: {
+    rejectUnauthorized: false,
+  },
+  family: 4,
 });
 }
 
@@ -76,6 +79,11 @@ async function sendOrderEmails(order, itemsDetailed = []) {
   const from = String(
     process.env.SMTP_FROM || process.env.SMTP_USER || ""
   ).trim();
+
+    if (!from) {
+    console.warn("SMTP_FROM is empty");
+    return;
+  }
 
   console.log("MAIL DEBUG:", {
     from,
