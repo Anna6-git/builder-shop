@@ -2,6 +2,7 @@
 
 const express = require("express");
 const nodemailer = require("nodemailer");
+const dns = require("dns").promises;
 const router = express.Router();
 
 const db = require("../db");
@@ -35,7 +36,7 @@ function ensureTables(cb) {
   });
 }
 
-function makeTransporter() {
+async function makeTransporter() {
   const host = String(process.env.SMTP_HOST || "").trim();
   const port = Number(process.env.SMTP_PORT || 587);
   const secure = String(process.env.SMTP_SECURE || "false").trim() === "true";
@@ -53,23 +54,34 @@ function makeTransporter() {
     return null;
   }
 
-return nodemailer.createTransport({
-  host,
-  port,
-  secure,
-  auth: { user, pass },
-  tls: {
-    rejectUnauthorized: false,
-  },
-  family: 4,
-  connectionTimeout: 10000,
-  greetingTimeout: 10000,
-  socketTimeout: 15000,
-});
+  let ipv4Address = host;
+
+  try {
+    const resolved = await dns.lookup(host, { family: 4 });
+    ipv4Address = resolved.address;
+    console.log("SMTP IPv4 resolved:", { host, ipv4Address });
+  } catch (err) {
+    console.error("SMTP IPv4 lookup failed:", err?.message || err);
+    return null;
+  }
+
+  return nodemailer.createTransport({
+    host: ipv4Address,
+    port,
+    secure,
+    auth: { user, pass },
+    tls: {
+      rejectUnauthorized: false,
+      servername: host
+    },
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 15000,
+  });
 }
 
 async function sendOrderEmails(order, itemsDetailed = []) {
-  const transporter = makeTransporter();
+const transporter = await makeTransporter();
   if (!transporter) {
     console.warn("SMTP transporter not configured");
     return;
