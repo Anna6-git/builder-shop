@@ -431,11 +431,10 @@ if (selectedDate.getDay() === 0) {
     if (checkoutHint) checkoutHint.textContent = "Заповніть ім’я, населений пункт і адресу.";
     return;
   }
-
-  if (!phone && !email) {
-    if (checkoutHint) checkoutHint.textContent = "Вкажіть телефон або email.";
-    return;
-  }
+if (!phone || !email) {
+  if (checkoutHint) checkoutHint.textContent = "Телефон і email є обов’язковими.";
+  return;
+}
 
   const cart = getCart();
   const entries = Object.entries(cart).filter(([, q]) => Number(q) > 0);

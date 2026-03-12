@@ -184,9 +184,9 @@ router.post("/", (req, res) => {
     return res.status(400).json({ error: "customer_name, city, address required" });
   }
 
-  if (!customer_phone && !customer_email) {
-    return res.status(400).json({ error: "customer_phone or customer_email required" });
-  }
+if (!customer_phone || !customer_email) {
+  return res.status(400).json({ error: "customer_phone and customer_email required" });
+}
 
   if (!delivery_date) {
     return res.status(400).json({ error: "delivery_date required" });
@@ -301,36 +301,45 @@ router.post("/", (req, res) => {
             const unit = String(it.unit || "").trim();
 
             db.get(
-              "SELECT id, stock_qty FROM products WHERE id = ? LIMIT 1",
-              [pid],
-              (eGet, row) => {
+  "SELECT id, stock_qty, is_custom_order FROM products WHERE id = ? LIMIT 1",
+  [pid],
+  (eGet, row) => {
                 if (eGet) return rollback(500, { error: eGet.message });
                 if (!row) return rollback(400, { error: `product ${pid} not found` });
 
-                const stock = Number(row.stock_qty);
+               const stock = Number(row.stock_qty);
+const isCustomOrder = Number(row.is_custom_order || 0) === 1;
 
-                if (!Number.isFinite(stock) || stock < qty) {
-                  return rollback(400, { error: `not enough stock for product ${pid}` });
-                }
+if (!isCustomOrder) {
+  if (!Number.isFinite(stock) || stock < qty) {
+    return rollback(400, { error: `not enough stock for product ${pid}` });
+  }
+}
 
-                db.run(
-                  "INSERT INTO order_items (order_id, product_id, qty, unit) VALUES (?, ?, ?, ?)",
-                  [orderId, pid, qty, unit || null],
-                  (eIns) => {
-                    if (eIns) return rollback(500, { error: eIns.message });
+db.run(
+  "INSERT INTO order_items (order_id, product_id, qty, unit) VALUES (?, ?, ?, ?)",
+  [orderId, pid, qty, unit || null],
+  (eIns) => {
+    if (eIns) return rollback(500, { error: eIns.message });
 
-                    db.run(
-                      "UPDATE products SET stock_qty = stock_qty - ? WHERE id = ?",
-                      [qty, pid],
-                      (eUpd) => {
-                        if (eUpd) return rollback(500, { error: eUpd.message });
+    if (isCustomOrder) {
+      left -= 1;
+      if (left === 0) commit();
+      return;
+    }
 
-                        left -= 1;
-                        if (left === 0) commit();
-                      }
-                    );
-                  }
-                );
+    db.run(
+      "UPDATE products SET stock_qty = stock_qty - ? WHERE id = ?",
+      [qty, pid],
+      (eUpd) => {
+        if (eUpd) return rollback(500, { error: eUpd.message });
+
+        left -= 1;
+        if (left === 0) commit();
+      }
+    );
+  }
+);
               }
             );
           });

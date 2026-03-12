@@ -876,9 +876,10 @@ pMinus?.addEventListener("click", () => {
 
   const step = Number(pQty.step) || 1;
   const min = Number(pQty.min) || step;
-  const max = CURRENT_PRODUCT.unitType === "pcs"
-    ? Number(CURRENT_PRODUCT.stockQty || 0)
-    : Infinity;
+const isCustom = Number(CURRENT_PRODUCT.isCustomOrder || 0) === 1;
+const max = !isCustom && CURRENT_PRODUCT.unitType === "pcs"
+  ? Number(CURRENT_PRODUCT.stockQty || 0)
+  : Infinity;
 
   let v = Number(pQty.value);
   v = clamp(v - step, min, max);
@@ -892,9 +893,10 @@ pPlus?.addEventListener("click", () => {
 
   const step = Number(pQty.step) || 1;
   const min = Number(pQty.min) || step;
-  const max = CURRENT_PRODUCT.unitType === "pcs"
-    ? Number(CURRENT_PRODUCT.stockQty || 0)
-    : Infinity;
+const isCustom = Number(CURRENT_PRODUCT.isCustomOrder || 0) === 1;
+const max = !isCustom && CURRENT_PRODUCT.unitType === "pcs"
+  ? Number(CURRENT_PRODUCT.stockQty || 0)
+  : Infinity;
 
   let v = Number(pQty.value);
   v = clamp(v + step, min, max);
