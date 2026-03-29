@@ -71,21 +71,68 @@ const pTitle = document.getElementById("pTitle");
 const pCat = document.getElementById("pCat");
 const pCatList = document.getElementById("pCatList");
 const pBrand = document.getElementById("pBrand");
-const pPrice = document.getElementById("pPrice");
 const pImg = document.getElementById("pImg");
 const pFile = document.getElementById("pFile");
-const pUnit = document.getElementById("pUnit");
-const pUnitType = document.getElementById("pUnitType");
-const pStockQty = document.getElementById("pStockQty");
 const pDescription = document.getElementById("pDescription");
 const pIsCustomOrder = document.getElementById("pIsCustomOrder");
 const pRelatedIds = document.getElementById("pRelatedIds");
 const addProductBtn = document.getElementById("addProductBtn");
 const prodsList = document.getElementById("prodsList");
 
+const variantRows = document.getElementById("variantRows");
+const addVariantRowBtn = document.getElementById("addVariantRowBtn");
+
+
 // state
 let CATEGORIES = [];
 let PRODUCTS = [];
+
+function createVariantRow(label = "", price = "", stockQty = "") {
+  const row = document.createElement("div");
+  row.className = "variantRow";
+  row.style.display = "grid";
+  row.style.gridTemplateColumns = "1.2fr 1fr 1fr auto";
+  row.style.gap = "8px";
+  row.style.marginBottom = "8px";
+
+  row.innerHTML = `
+    <input class="searchInput" data-field="label" placeholder="Фасування (напр. 0.9кг)" value="${label}">
+    <input class="searchInput" data-field="price" placeholder="Ціна" type="number" step="0.01" value="${price}">
+    <input class="searchInput" data-field="stockQty" placeholder="Кількість" type="number" step="0.1" value="${stockQty}">
+    <button class="btnDanger" type="button" data-act="removeVariant">×</button>
+  `;
+
+  row.addEventListener("click", (e) => {
+    if (e.target?.dataset?.act === "removeVariant") {
+      row.remove();
+
+      if (!variantRows.children.length) {
+        variantRows.appendChild(createVariantRow());
+      }
+    }
+  });
+
+  return row;
+}
+
+function collectVariantsFromForm() {
+  const rows = Array.from(variantRows.querySelectorAll(".variantRow"));
+
+  return rows
+    .map((row) => {
+      const label = row.querySelector('[data-field="label"]')?.value?.trim() || "";
+      const price = Number(row.querySelector('[data-field="price"]')?.value);
+      const stockQty = Number(row.querySelector('[data-field="stockQty"]')?.value || 0);
+
+      return { label, price, stockQty };
+    })
+    .filter((v) => v.label || Number.isFinite(v.price) || Number.isFinite(v.stockQty));
+}
+
+function resetVariantsForm() {
+  variantRows.innerHTML = "";
+  variantRows.appendChild(createVariantRow());
+}
 
 function showPanel() {
   loginBox.hidden = true;
@@ -109,6 +156,10 @@ function setTab(tab) {
 
 tabCats?.addEventListener("click", () => setTab("cats"));
 tabProds?.addEventListener("click", () => setTab("prods"));
+
+addVariantRowBtn?.addEventListener("click", () => {
+  variantRows.appendChild(createVariantRow());
+});
 
 logoutBtn?.addEventListener("click", () => {
   token = "";
@@ -266,14 +317,10 @@ const matchedCat = CATEGORIES.find(
 );
 const catId = matchedCat ? Number(matchedCat.id) : null;
   const brand = pBrand.value.trim();
-  const price = Number(pPrice.value);
   let img = (pImg.value || "").trim();
-
-  const unit = (pUnit.value || "").trim() || "шт";
-  const unitType = (pUnitType.value || "pcs").trim();
-  const stockQty = Number(pStockQty.value || 0);
   const description = (pDescription.value || "").trim();
   const isCustomOrder = Number(pIsCustomOrder.value || 0);
+  const variants = collectVariantsFromForm();
 
   const relatedIds = (pRelatedIds.value || "")
     .split(",")
@@ -291,12 +338,22 @@ const catId = matchedCat ? Number(matchedCat.id) : null;
     return alert("Введіть виробника");
   }
 
-  if (!Number.isFinite(price) || price <= 0) {
-    return alert("Ціна має бути більше 0");
+  if (!variants.length) {
+    return alert("Додай хоча б одне фасування");
   }
 
-  if (!Number.isFinite(stockQty) || stockQty < 0) {
-    return alert("Кількість на складі має бути числом ≥ 0");
+  for (const v of variants) {
+    if (!v.label) {
+      return alert("У кожного фасування має бути назва, наприклад 0.9кг");
+    }
+
+    if (!Number.isFinite(v.price) || v.price <= 0) {
+      return alert(`Для фасування "${v.label || "—"}" ціна має бути більше 0`);
+    }
+
+    if (!Number.isFinite(v.stockQty) || v.stockQty < 0) {
+      return alert(`Для фасування "${v.label || "—"}" кількість має бути числом ≥ 0`);
+    }
   }
 
   try {
@@ -317,31 +374,25 @@ const catId = matchedCat ? Number(matchedCat.id) : null;
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         title,
-        price,
         catId,
         brand,
         img,
-        unit,
-        unitType,
-        stockQty,
         description,
         isActive: 1,
         isCustomOrder,
         relatedIds,
+        variants,
       }),
     });
 
     pTitle.value = "";
     pBrand.value = "";
-    pPrice.value = "";
     pImg.value = "";
     if (pFile) pFile.value = "";
-    pUnit.value = "";
-    pUnitType.value = "pcs";
-    pStockQty.value = "";
     pDescription.value = "";
     pIsCustomOrder.value = "0";
     pRelatedIds.value = "";
+    resetVariantsForm();
 
     await refreshAll();
   } catch (e) {
@@ -368,14 +419,18 @@ function renderProds() {
       <div>
         <div style="font-weight:900">${p.title}</div>
         <div style="font-size:12px;color:#6b7280">
-          ${cat ? cat.name : "Без категорії"} • ${p.brand || ""} • ${p.unitType || "pcs"}
-          • На складі: ${Number(p.stockQty ?? 0)}
+          ${cat ? cat.name : "Без категорії"} • ${p.brand || ""}
+        </div>
+        <div style="font-size:12px;color:#374151; margin-top:4px;">
+          ${
+            Array.isArray(p.variants) && p.variants.length
+              ? p.variants.map(v => `${v.label}: ${Number(v.price).toFixed(2)} ₴ • склад: ${Number(v.stockQty ?? 0)}`).join("<br>")
+              : "Фасування не задані"
+          }
         </div>
       </div>
 
-      <input type="number" value="${p.price}" data-field="price" />
-      <input type="number" value="${Number(p.stockQty ?? 0)}" data-field="stockQty" placeholder="qty" />
-      <button class="btn" data-act="save">Зберегти</button>
+      <button class="btn" data-act="editVariants">Редагувати</button>
       <button class="btnDanger" data-act="del">Видалити</button>
     `;
 
@@ -391,22 +446,44 @@ function renderProds() {
           await refreshAll();
         }
 
-        if (act === "save") {
-          const priceInput = row.querySelector('input[data-field="price"]');
-          const stockInput = row.querySelector('input[data-field="stockQty"]');
+        if (act === "editVariants") {
+          const variantsText = prompt(
+            "Введи фасування у форматі:\n0.9кг|180|6\n2.8кг|490|3",
+            Array.isArray(p.variants)
+              ? p.variants.map(v => `${v.label}|${v.price}|${v.stockQty ?? 0}`).join("\n")
+              : ""
+          );
 
-          const newPrice = Number(priceInput.value);
-          const newStock = Number(stockInput.value);
+          if (variantsText === null) return;
 
-          if (!(newPrice > 0)) return alert("Ціна має бути > 0");
-          if (!Number.isFinite(newStock) || newStock < 0) return alert("Кількість має бути ≥ 0");
+          const variants = variantsText
+            .split("\n")
+            .map(line => line.trim())
+            .filter(Boolean)
+            .map((line) => {
+              const [label, price, stockQty] = line.split("|").map(x => (x || "").trim());
+              return {
+                label,
+                price: Number(price),
+                stockQty: Number(stockQty || 0),
+              };
+            });
+
+          if (!variants.length) {
+            return alert("Потрібно вказати хоча б одне фасування");
+          }
+
+          for (const v of variants) {
+            if (!v.label) return alert("У кожного фасування має бути назва");
+            if (!Number.isFinite(v.price) || v.price <= 0) return alert(`Невірна ціна для ${v.label}`);
+            if (!Number.isFinite(v.stockQty) || v.stockQty < 0) return alert(`Невірний склад для ${v.label}`);
+          }
 
           await api(`/products/${p.id}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              price: newPrice,
-              stockQty: Math.floor(newStock),
+              variants,
             }),
           });
 
@@ -435,6 +512,7 @@ function renderProds() {
     }
   }
   showLogin();
+  resetVariantsForm();
 })();
 
 ;

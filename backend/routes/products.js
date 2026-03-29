@@ -19,7 +19,35 @@ function parseRelatedIds(value) {
   }
 }
 
-function mapProduct(row) {
+function normalizeVariants(raw) {
+  if (!Array.isArray(raw)) return [];
+
+  return raw
+    .map((item, index) => {
+      const label = String(item?.label || "").trim();
+      const price = Number(item?.price);
+      const stockQty = Number(item?.stockQty ?? item?.stock_qty ?? 0);
+
+      return {
+        label,
+        price,
+        stockQty,
+        sortOrder: Number.isFinite(Number(item?.sortOrder))
+          ? Number(item.sortOrder)
+          : index,
+      };
+    })
+    .filter(
+      (v) =>
+        v.label &&
+        Number.isFinite(v.price) &&
+        v.price >= 0 &&
+        Number.isFinite(v.stockQty) &&
+        v.stockQty >= 0
+    );
+}
+
+function mapProduct(row, variants = []) {
   return {
     id: row.id,
     title: row.name ?? "",
@@ -38,7 +66,82 @@ function mapProduct(row) {
     updatedAt: row.updated_at ?? null,
     code: row.code ?? "",
     relatedIds: parseRelatedIds(row.related_ids),
+    variants,
   };
+}
+
+function loadVariantsByProductIds(productIds, cb) {
+  const ids = Array.isArray(productIds)
+    ? productIds.map(Number).filter(Number.isFinite)
+    : [];
+
+  if (!ids.length) return cb(null, new Map());
+
+  const placeholders = ids.map(() => "?").join(",");
+
+  db.all(
+    `SELECT id, product_id, label, price, stock_qty, sort_order
+     FROM product_variants
+     WHERE product_id IN (${placeholders})
+     ORDER BY product_id ASC, sort_order ASC, id ASC`,
+    ids,
+    (err, rows) => {
+      if (err) return cb(err);
+
+      const map = new Map();
+
+      for (const row of rows || []) {
+        const pid = Number(row.product_id);
+        if (!map.has(pid)) map.set(pid, []);
+
+        map.get(pid).push({
+          id: Number(row.id),
+          label: row.label ?? "",
+          price: Number(row.price ?? 0),
+          stockQty: Number(row.stock_qty ?? 0),
+          sortOrder: Number(row.sort_order ?? 0),
+        });
+      }
+
+      cb(null, map);
+    }
+  );
+}
+
+function replaceVariants(productId, variants, cb) {
+  db.run(`DELETE FROM product_variants WHERE product_id = ?`, [productId], (delErr) => {
+    if (delErr) return cb(delErr);
+
+    if (!variants.length) return cb(null);
+
+    let left = variants.length;
+    let failed = false;
+
+    variants.forEach((variant, index) => {
+      db.run(
+        `INSERT INTO product_variants (product_id, label, price, stock_qty, sort_order)
+         VALUES (?, ?, ?, ?, ?)`,
+        [
+          productId,
+          variant.label,
+          variant.price,
+          variant.stockQty,
+          Number.isFinite(variant.sortOrder) ? variant.sortOrder : index,
+        ],
+        (insErr) => {
+          if (failed) return;
+
+          if (insErr) {
+            failed = true;
+            return cb(insErr);
+          }
+
+          left -= 1;
+          if (left === 0) cb(null);
+        }
+      );
+    });
+  });
 }
 
 router.get("/", (_req, res) => {
@@ -67,7 +170,18 @@ router.get("/", (_req, res) => {
     [],
     (err, rows) => {
       if (err) return res.status(500).json({ error: err.message });
-      res.json((rows || []).map(mapProduct));
+
+      const ids = (rows || []).map((r) => Number(r.id));
+
+      loadVariantsByProductIds(ids, (varErr, variantsMap) => {
+        if (varErr) return res.status(500).json({ error: varErr.message });
+
+        res.json(
+          (rows || []).map((row) =>
+            mapProduct(row, variantsMap.get(Number(row.id)) || [])
+          )
+        );
+      });
     }
   );
 });
@@ -106,7 +220,11 @@ router.get("/:id", (req, res) => {
       if (err) return res.status(500).json({ error: err.message });
       if (!row) return res.status(404).json({ error: "not found" });
 
-      res.json(mapProduct(row));
+      loadVariantsByProductIds([id], (varErr, variantsMap) => {
+        if (varErr) return res.status(500).json({ error: varErr.message });
+
+        res.json(mapProduct(row, variantsMap.get(id) || []));
+      });
     }
   );
 });
@@ -115,29 +233,15 @@ router.post("/", auth, (req, res) => {
   const b = req.body || {};
 
   const name = String(b.title || b.name || "").trim();
-  const price = Number(b.price);
   const category_id = b.catId ?? b.category_id ?? null;
   const description = String(b.description || "").trim();
   const image_url = String(b.img || b.image_url || "").trim();
   const brand = String(b.brand || "").trim();
-  const unit = String(b.unit || "шт").trim();
-  const unit_type = String(b.unitType || b.unit_type || "pcs").trim();
-
-  const stockQtyRaw = b.stockQty ?? b.stock_qty;
-  const stock_qty = Number.isFinite(Number(stockQtyRaw))
-    ? Number(stockQtyRaw)
-    : 0;
-
-  const is_active =
-    b.isActive === 0 || b.is_active === 0 ? 0 : 1;
-
-  const is_custom_order =
-    b.isCustomOrder === 1 || b.is_custom_order === 1 ? 1 : 0;
-
+  const is_active = b.isActive === 0 || b.is_active === 0 ? 0 : 1;
+  const is_custom_order = b.isCustomOrder === 1 || b.is_custom_order === 1 ? 1 : 0;
   const custom_note_placeholder = String(
     b.customNotePlaceholder || b.custom_note_placeholder || ""
   ).trim();
-
   const code = String(b.code || "").trim();
 
   const related_ids = JSON.stringify(
@@ -146,17 +250,18 @@ router.post("/", auth, (req, res) => {
       : []
   );
 
+  const variants = normalizeVariants(b.variants);
+
   if (!name) {
     return res.status(400).json({ error: "title/name required" });
   }
 
-  if (!Number.isFinite(price) || price < 0) {
-    return res.status(400).json({ error: "invalid price" });
+  if (!variants.length) {
+    return res.status(400).json({ error: "variants required" });
   }
 
-  if (!Number.isFinite(stock_qty) || stock_qty < 0) {
-    return res.status(400).json({ error: "invalid stock_qty" });
-  }
+  const firstVariant = variants[0];
+  const totalStock = variants.reduce((sum, v) => sum + Number(v.stockQty || 0), 0);
 
   db.run(
     `INSERT INTO products (
@@ -179,14 +284,14 @@ router.post("/", auth, (req, res) => {
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'), ?, ?)`,
     [
       name,
-      price,
+      firstVariant.price,
       category_id,
       description,
       image_url,
       brand,
-      unit,
-      unit_type,
-      stock_qty,
+      firstVariant.label,
+      "variant",
+      totalStock,
       is_active,
       is_custom_order,
       custom_note_placeholder,
@@ -195,7 +300,13 @@ router.post("/", auth, (req, res) => {
     ],
     function (err) {
       if (err) return res.status(500).json({ error: err.message });
-      return res.json({ ok: true, id: this.lastID });
+
+      const productId = this.lastID;
+
+      replaceVariants(productId, variants, (varErr) => {
+        if (varErr) return res.status(500).json({ error: varErr.message });
+        return res.json({ ok: true, id: productId });
+      });
     }
   );
 });
@@ -224,14 +335,6 @@ router.patch("/:id", auth, (req, res) => {
     setField("name = ?", value);
   }
 
-  if (b.price !== undefined) {
-    const value = Number(b.price);
-    if (!Number.isFinite(value) || value < 0) {
-      return res.status(400).json({ error: "invalid price" });
-    }
-    setField("price = ?", value);
-  }
-
   if (b.catId !== undefined || b.category_id !== undefined) {
     setField("category_id = ?", b.catId ?? b.category_id);
   }
@@ -248,40 +351,17 @@ router.patch("/:id", auth, (req, res) => {
     setField("brand = ?", String(b.brand).trim());
   }
 
-  if (b.unit !== undefined) {
-    setField("unit = ?", String(b.unit).trim());
-  }
-
-  if (b.unitType !== undefined || b.unit_type !== undefined) {
-    setField(
-      "unit_type = ?",
-      String(b.unitType ?? b.unit_type).trim()
-    );
-  }
-
-  if (b.stockQty !== undefined || b.stock_qty !== undefined) {
-    const value = Number(b.stockQty ?? b.stock_qty);
-    if (!Number.isFinite(value) || value < 0) {
-      return res.status(400).json({ error: "invalid stock_qty" });
-    }
-    setField("stock_qty = ?", value);
-  }
-
   if (b.isActive !== undefined || b.is_active !== undefined) {
-    setField("is_active = ?", (b.isActive ?? b.is_active) ? 1 : 0);
+    const v = Number(b.isActive ?? b.is_active) === 0 ? 0 : 1;
+    setField("is_active = ?", v);
   }
 
   if (b.isCustomOrder !== undefined || b.is_custom_order !== undefined) {
-    setField(
-      "is_custom_order = ?",
-      (b.isCustomOrder ?? b.is_custom_order) ? 1 : 0
-    );
+    const v = Number(b.isCustomOrder ?? b.is_custom_order) === 1 ? 1 : 0;
+    setField("is_custom_order = ?", v);
   }
 
-  if (
-    b.customNotePlaceholder !== undefined ||
-    b.custom_note_placeholder !== undefined
-  ) {
+  if (b.customNotePlaceholder !== undefined || b.custom_note_placeholder !== undefined) {
     setField(
       "custom_note_placeholder = ?",
       String(b.customNotePlaceholder ?? b.custom_note_placeholder).trim()
@@ -293,24 +373,55 @@ router.patch("/:id", auth, (req, res) => {
   }
 
   if (b.relatedIds !== undefined) {
-    const arr = Array.isArray(b.relatedIds)
-      ? b.relatedIds.map(Number).filter(Number.isFinite)
-      : [];
-
-    setField("related_ids = ?", JSON.stringify(arr));
+    const related_ids = JSON.stringify(
+      Array.isArray(b.relatedIds)
+        ? b.relatedIds.map(Number).filter(Number.isFinite)
+        : []
+    );
+    setField("related_ids = ?", related_ids);
   }
 
-  if (!fields.length) {
-    return res.status(400).json({ error: "no fields to update" });
+  const variantsProvided = b.variants !== undefined;
+  const variants = variantsProvided ? normalizeVariants(b.variants) : [];
+
+  if (variantsProvided && !variants.length) {
+    return res.status(400).json({ error: "variants required" });
+  }
+
+  if (variantsProvided) {
+    const firstVariant = variants[0];
+    const totalStock = variants.reduce((sum, v) => sum + Number(v.stockQty || 0), 0);
+
+    setField("price = ?", firstVariant.price);
+    setField("unit = ?", firstVariant.label);
+    setField("unit_type = ?", "variant");
+    setField("stock_qty = ?", totalStock);
   }
 
   fields.push("updated_at = datetime('now')");
-  const sql = `UPDATE products SET ${fields.join(", ")} WHERE id = ?`;
-  values.push(id);
 
-  db.run(sql, values, function (err) {
+  const sqlValues = [];
+  fields.forEach((field, idx) => {
+    if (!field.includes("datetime('now')")) {
+      sqlValues.push(values[idx]);
+    }
+  });
+
+  const sql = `UPDATE products SET ${fields.join(", ")} WHERE id = ?`;
+  sqlValues.push(id);
+
+  db.run(sql, sqlValues, function (err) {
     if (err) return res.status(500).json({ error: err.message });
-    return res.json({ ok: true, changes: this.changes });
+    if (!this.changes) return res.status(404).json({ error: "not found" });
+
+    if (!variantsProvided) {
+      return res.json({ ok: true });
+    }
+
+    replaceVariants(id, variants, (varErr) => {
+      if (varErr) return res.status(500).json({ error: varErr.message });
+      return res.json({ ok: true });
+    });
   });
 });
 
@@ -321,16 +432,18 @@ router.delete("/:id", auth, (req, res) => {
     return res.status(400).json({ error: "invalid id" });
   }
 
-  db.run(
-    `UPDATE products
-     SET is_active = 0, updated_at = datetime('now')
-     WHERE id = ?`,
-    [id],
-    function (err) {
-      if (err) return res.status(500).json({ error: err.message });
-      return res.json({ ok: true, changes: this.changes });
-    }
-  );
+  db.serialize(() => {
+    db.run(`DELETE FROM product_variants WHERE product_id = ?`, [id], (varErr) => {
+      if (varErr) return res.status(500).json({ error: varErr.message });
+
+      db.run(`DELETE FROM products WHERE id = ?`, [id], function (err) {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!this.changes) return res.status(404).json({ error: "not found" });
+
+        return res.json({ ok: true });
+      });
+    });
+  });
 });
 
 module.exports = router;

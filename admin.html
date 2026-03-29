@@ -69,17 +69,13 @@
 <input id="pCat" class="searchInput" list="pCatList" placeholder="Почніть вводити категорію">
 <datalist id="pCatList"></datalist>
   <input id="pBrand" class="searchInput" placeholder="Виробник (Knauf…)" />
-  <input id="pPrice" class="searchInput" placeholder="Ціна (грн)" type="number" step="0.01" />
+ <div class="variantsBox">
+  <div style="font-weight:800; margin-bottom:8px;">Варіанти фасування</div>
 
-  <input id="pUnit" class="searchInput" placeholder="Одиниця показу (шт / м / кг / мішок)" />
+  <div id="variantRows"></div>
 
-  <select id="pUnitType" class="unitSelect">
-    <option value="pcs">Штуки</option>
-    <option value="length">Довжина</option>
-    <option value="weight">Вага</option>
-  </select>
-
-  <input id="pStockQty" class="searchInput" placeholder="Кількість на складі (число)" type="number" step="0.1" />
+  <button class="btn" type="button" id="addVariantRowBtn">+ Додати фасування</button>
+</div>
 
   <textarea id="pDescription" class="searchInput" placeholder="Опис товару"></textarea>
 

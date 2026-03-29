@@ -268,8 +268,8 @@ async function loadSettingsFromBackend() {
   try {
     const settings = await api("/settings", { method: "GET" });
 
-    if (Array.isArray(settings?.slides) && settings.slides.length) {
-      SLIDES = settings.slides;
+    if (Array.isArray(settings?.slides)) {
+      SLIDES = normalizeSlides(settings.slides);
     }
 
     if (Array.isArray(settings?.homeInfoCards) && settings.homeInfoCards.length) {
@@ -826,44 +826,128 @@ function closeProductModal() {
   currentProduct = null;
 }
 
+
 /* =========================
    SLIDER
 ========================= */
 let SLIDES = [
-  { title: "НОВИНКА!", subtitle: "Декоративні покриття для інтер’єру", imageUrl: "assets/img/banner1.jpg" },
-  { title: "ЗНИЖКИ", subtitle: "Топові матеріали за вигідними цінами", imageUrl: "assets/img/banner2.jpg" },
-  { title: "ДОСТАВКА", subtitle: "По Радомишлю та області — уточнюйте в магазині", imageUrl: "assets/img/banner3.jpg" }
+  {
+    title: "НОВИНКА!",
+    subtitle: "Декоративні покриття для інтер’єру",
+    imageUrl: "assets/img/banner1.jpg",
+    linkType: "none",
+    linkValue: "",
+    buttonText: ""
+  },
+  {
+    title: "ЗНИЖКИ",
+    subtitle: "Топові матеріали за вигідними цінами",
+    imageUrl: "assets/img/banner2.jpg",
+    linkType: "none",
+    linkValue: "",
+    buttonText: ""
+  },
+  {
+    title: "ДОСТАВКА",
+    subtitle: "По Радомишлю та області — уточнюйте в магазині",
+    imageUrl: "assets/img/banner3.jpg",
+    linkType: "none",
+    linkValue: "",
+    buttonText: ""
+  }
 ];
 
 let sliderIndex = 0;
 let sliderTimer = null;
 
+function normalizeSlides(rawSlides) {
+  if (!Array.isArray(rawSlides)) return [];
+
+  return rawSlides.map((s) => ({
+    title: String(s?.title || "").trim(),
+    subtitle: String(s?.subtitle || "").trim(),
+    imageUrl: String(s?.imageUrl || "").trim(),
+    linkType: ["none", "category", "product"].includes(String(s?.linkType || "none"))
+      ? String(s.linkType)
+      : "none",
+    linkValue: s?.linkValue != null ? String(s.linkValue).trim() : "",
+    buttonText: String(s?.buttonText || "").trim()
+  }));
+}
+
+function getSlideHref(slide) {
+  if (!slide) return "";
+
+  const type = String(slide.linkType || "none");
+  const value = String(slide.linkValue || "").trim();
+
+  if (!value || type === "none") return "";
+
+  if (type === "category") {
+    return `category.html?cat=${encodeURIComponent(value)}`;
+  }
+
+  if (type === "product") {
+    return `product.html?id=${encodeURIComponent(value)}`;
+  }
+
+  return "";
+}
+
 function renderSlider() {
   if (!slidesBox || !dotsBox) return;
 
+  SLIDES = normalizeSlides(SLIDES);
+
   slidesBox.innerHTML = "";
   dotsBox.innerHTML = "";
+
+  if (!SLIDES.length) {
+    slidesBox.innerHTML = `
+      <div class="slide active">
+        <div class="slideOverlay"></div>
+        <div class="slideText">
+          <h2>Слайдів поки немає</h2>
+        </div>
+      </div>
+    `;
+    return;
+  }
 
   SLIDES.forEach((s, i) => {
     const slide = document.createElement("div");
     slide.className = "slide" + (i === 0 ? " active" : "");
     slide.style.backgroundImage = `url("${s.imageUrl}")`;
+
+    const href = getSlideHref(s);
+    const hasLink = Boolean(href);
+    const buttonText = s.buttonText || "Перейти";
+
     slide.innerHTML = `
       <div class="slideOverlay"></div>
       <div class="slideText">
         ${s.title ? `<h2>${escapeHTML(s.title)}</h2>` : ""}
         ${s.subtitle ? `<p>${escapeHTML(s.subtitle)}</p>` : ""}
+        ${
+          hasLink
+            ? `<a class="slideBtn" href="${escapeHTML(href)}">${escapeHTML(buttonText)}</a>`
+            : ""
+        }
       </div>
     `;
+
     slidesBox.appendChild(slide);
 
-    const dot = document.createElement("div");
+    const dot = document.createElement("button");
     dot.className = "dot" + (i === 0 ? " active" : "");
+    dot.type = "button";
+    dot.setAttribute("aria-label", `Перейти до слайду ${i + 1}`);
     dot.addEventListener("click", () => goToSlide(i, true));
     dotsBox.appendChild(dot);
   });
 
   sliderIndex = 0;
+  updateSliderNavVisibility();
   startAutoSlider();
 }
 
@@ -886,27 +970,28 @@ function goToSlide(i, restart = false) {
 
 function startAutoSlider() {
   if (sliderTimer) clearInterval(sliderTimer);
-  sliderTimer = setInterval(() => goToSlide(sliderIndex + 1, false), 8000);
+
+  if (SLIDES.length <= 1) return;
+
+  sliderTimer = setInterval(() => {
+    goToSlide(sliderIndex + 1, false);
+  }, 8000);
 }
 
-/* =========================
-   CALL FAB
-========================= */
-const callFabBtn = document.getElementById("callFabBtn");
-const callFabMenu = document.getElementById("callFabMenu");
-
-function toggleCallFab() {
-  if (!callFabMenu) return;
-  callFabMenu.hidden = !callFabMenu.hidden;
-}
-
-callFabBtn?.addEventListener("click", toggleCallFab);
-
-document.addEventListener("click", (e) => {
-  if (!e.target.closest(".callFabWrap") && callFabMenu) {
-    callFabMenu.hidden = true;
+function stopAutoSlider() {
+  if (sliderTimer) {
+    clearInterval(sliderTimer);
+    sliderTimer = null;
   }
-});
+}
+
+function updateSliderNavVisibility() {
+  const shouldShow = SLIDES.length > 1;
+
+  if (prevSlideBtn) prevSlideBtn.hidden = !shouldShow;
+  if (nextSlideBtn) nextSlideBtn.hidden = !shouldShow;
+  if (dotsBox) dotsBox.hidden = !shouldShow;
+}
 
 /* =========================
    SLIDES ADMIN
@@ -922,43 +1007,141 @@ const slidesAdminHint = document.getElementById("slidesAdminHint");
 function openSlidesAdminModal() {
   if (!isAdmin()) return;
   renderSlidesAdminList();
-  adminSlidesOverlay.hidden = false;
-  adminSlidesModal.hidden = false;
+  if (adminSlidesOverlay) adminSlidesOverlay.hidden = false;
+  if (adminSlidesModal) adminSlidesModal.hidden = false;
 }
+
 function closeSlidesAdminModal() {
-  adminSlidesOverlay.hidden = true;
-  adminSlidesModal.hidden = true;
+  if (adminSlidesOverlay) adminSlidesOverlay.hidden = true;
+  if (adminSlidesModal) adminSlidesModal.hidden = true;
 }
 
 adminSlidesBtn?.addEventListener("click", openSlidesAdminModal);
 adminSlidesClose?.addEventListener("click", closeSlidesAdminModal);
 adminSlidesOverlay?.addEventListener("click", closeSlidesAdminModal);
 
+async function saveSlidesToBackend() {
+  await api("/settings", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ slides: SLIDES })
+  });
+}
+
 function renderSlidesAdminList() {
   if (!slidesAdminList) return;
+
   slidesAdminList.innerHTML = "";
 
+  const cats = getCats();
+  const prods = getProds();
+
   SLIDES.forEach((slide, index) => {
+    const safeSlide = {
+      title: String(slide?.title || ""),
+      subtitle: String(slide?.subtitle || ""),
+      imageUrl: String(slide?.imageUrl || ""),
+      linkType: ["none", "category", "product"].includes(String(slide?.linkType || "none"))
+        ? String(slide.linkType)
+        : "none",
+      linkValue: slide?.linkValue != null ? String(slide.linkValue) : "",
+      buttonText: String(slide?.buttonText || "")
+    };
+
+    const categoryOptions = [
+      `<option value="">Оберіть категорію</option>`,
+      ...cats.map(
+        (c) =>
+          `<option value="${escapeHTML(String(c.id))}" ${
+            safeSlide.linkType === "category" && String(c.id) === safeSlide.linkValue ? "selected" : ""
+          }>${escapeHTML(c.name)}</option>`
+      )
+    ].join("");
+
+    const productOptions = [
+      `<option value="">Оберіть товар</option>`,
+      ...prods.map(
+        (p) =>
+          `<option value="${escapeHTML(String(p.id))}" ${
+            safeSlide.linkType === "product" && String(p.id) === safeSlide.linkValue ? "selected" : ""
+          }>${escapeHTML(p.title)}</option>`
+      )
+    ].join("");
+
     const card = document.createElement("div");
     card.className = "slideAdminCard";
     card.innerHTML = `
       <div class="slideAdminCard__title">Слайд ${index + 1}</div>
       <div class="slideAdminCard__grid">
-        <input class="authInput" data-field="title" data-index="${index}" placeholder="Заголовок" value="${escapeHTML(slide.title || "")}">
-        <input class="authInput" data-field="subtitle" data-index="${index}" placeholder="Підзаголовок" value="${escapeHTML(slide.subtitle || "")}">
-        <input class="authInput" data-field="imageUrl" data-index="${index}" placeholder="Фото URL" value="${escapeHTML(slide.imageUrl || "")}">
+        <input
+          class="authInput"
+          data-field="title"
+          data-index="${index}"
+          placeholder="Заголовок"
+          value="${escapeHTML(safeSlide.title)}"
+        >
+
+        <input
+          class="authInput"
+          data-field="subtitle"
+          data-index="${index}"
+          placeholder="Підзаголовок"
+          value="${escapeHTML(safeSlide.subtitle)}"
+        >
+
+        <input
+          class="authInput"
+          data-field="imageUrl"
+          data-index="${index}"
+          placeholder="Фото URL"
+          value="${escapeHTML(safeSlide.imageUrl)}"
+        >
+
         <input class="authInput slideFileInput" data-index="${index}" type="file" accept="image/*">
-        <img class="slideAdminPreview" src="${escapeHTML(slide.imageUrl || "")}" alt="">
+
+        <select class="authInput slideLinkTypeInput" data-field="linkType" data-index="${index}">
+          <option value="none" ${safeSlide.linkType === "none" ? "selected" : ""}>Без переходу</option>
+          <option value="category" ${safeSlide.linkType === "category" ? "selected" : ""}>Перехід у категорію</option>
+          <option value="product" ${safeSlide.linkType === "product" ? "selected" : ""}>Перехід у товар</option>
+        </select>
+
+        <select
+          class="authInput slideCategorySelect"
+          data-field="categoryValue"
+          data-index="${index}"
+          ${safeSlide.linkType === "category" ? "" : "hidden"}
+        >
+          ${categoryOptions}
+        </select>
+
+        <select
+          class="authInput slideProductSelect"
+          data-field="productValue"
+          data-index="${index}"
+          ${safeSlide.linkType === "product" ? "" : "hidden"}
+        >
+          ${productOptions}
+        </select>
+
+        <input
+          class="authInput"
+          data-field="buttonText"
+          data-index="${index}"
+          placeholder="Текст кнопки, напр. Перейти"
+          value="${escapeHTML(safeSlide.buttonText)}"
+        >
+
+        <img class="slideAdminPreview" src="${escapeHTML(safeSlide.imageUrl || "")}" alt="">
+
         <div class="slideAdminActions">
           <button class="btnPrimary" data-act="save-slide" data-index="${index}" type="button">Зберегти</button>
           <button class="btnDanger" data-act="delete-slide" data-index="${index}" type="button">Видалити</button>
         </div>
       </div>
     `;
+
     slidesAdminList.appendChild(card);
   });
-
-  
 
   slidesAdminList.querySelectorAll(".slideFileInput").forEach((input) => {
     input.addEventListener("change", async () => {
@@ -971,8 +1154,10 @@ function renderSlidesAdminList() {
         const url = await uploadImage(file);
         const urlInput = slidesAdminList.querySelector(`input[data-field="imageUrl"][data-index="${index}"]`);
         const preview = input.parentElement.querySelector(".slideAdminPreview");
+
         if (urlInput) urlInput.value = url;
         if (preview) preview.src = url;
+
         if (slidesAdminHint) slidesAdminHint.textContent = "Фото завантажено.";
       } catch (e) {
         if (slidesAdminHint) slidesAdminHint.textContent = "Помилка: " + e.message;
@@ -980,26 +1165,57 @@ function renderSlidesAdminList() {
     });
   });
 
-slidesAdminList.querySelectorAll('[data-act="save-slide"]').forEach((btn) => {
-  btn.addEventListener("click", async () => {
-    const index = Number(btn.dataset.index);
-    const titleInput = slidesAdminList.querySelector(`input[data-field="title"][data-index="${index}"]`);
-    const subtitleInput = slidesAdminList.querySelector(`input[data-field="subtitle"][data-index="${index}"]`);
-    const imageInput = slidesAdminList.querySelector(`input[data-field="imageUrl"][data-index="${index}"]`);
+  slidesAdminList.querySelectorAll(".slideLinkTypeInput").forEach((select) => {
+    select.addEventListener("change", () => {
+      const index = Number(select.dataset.index);
+      const linkType = select.value;
 
-    SLIDES[index] = {
-      title: String(titleInput?.value || "").trim(),
-      subtitle: String(subtitleInput?.value || "").trim(),
-      imageUrl: String(imageInput?.value || "").trim()
-    };
+      const categorySelect = slidesAdminList.querySelector(`.slideCategorySelect[data-index="${index}"]`);
+      const productSelect = slidesAdminList.querySelector(`.slideProductSelect[data-index="${index}"]`);
 
-    await saveSlidesToBackend();
-    await loadSettingsFromBackend();
-    renderSlider();
-    renderSlidesAdminList();
-    if (slidesAdminHint) slidesAdminHint.textContent = "Слайд збережено.";
+      if (categorySelect) categorySelect.hidden = linkType !== "category";
+      if (productSelect) productSelect.hidden = linkType !== "product";
+    });
   });
-});
+
+  slidesAdminList.querySelectorAll('[data-act="save-slide"]').forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const index = Number(btn.dataset.index);
+
+      const titleInput = slidesAdminList.querySelector(`input[data-field="title"][data-index="${index}"]`);
+      const subtitleInput = slidesAdminList.querySelector(`input[data-field="subtitle"][data-index="${index}"]`);
+      const imageInput = slidesAdminList.querySelector(`input[data-field="imageUrl"][data-index="${index}"]`);
+      const linkTypeInput = slidesAdminList.querySelector(`select[data-field="linkType"][data-index="${index}"]`);
+      const categorySelect = slidesAdminList.querySelector(`select[data-field="categoryValue"][data-index="${index}"]`);
+      const productSelect = slidesAdminList.querySelector(`select[data-field="productValue"][data-index="${index}"]`);
+      const buttonTextInput = slidesAdminList.querySelector(`input[data-field="buttonText"][data-index="${index}"]`);
+
+      const linkType = String(linkTypeInput?.value || "none");
+      let linkValue = "";
+
+      if (linkType === "category") {
+        linkValue = String(categorySelect?.value || "").trim();
+      } else if (linkType === "product") {
+        linkValue = String(productSelect?.value || "").trim();
+      }
+
+      SLIDES[index] = {
+        title: String(titleInput?.value || "").trim(),
+        subtitle: String(subtitleInput?.value || "").trim(),
+        imageUrl: String(imageInput?.value || "").trim(),
+        linkType,
+        linkValue,
+        buttonText: String(buttonTextInput?.value || "").trim()
+      };
+
+      await saveSlidesToBackend();
+      await loadSettingsFromBackend();
+      renderSlider();
+      renderSlidesAdminList();
+
+      if (slidesAdminHint) slidesAdminHint.textContent = "Слайд збережено.";
+    });
+  });
 
   slidesAdminList.querySelectorAll('[data-act="delete-slide"]').forEach((btn) => {
     btn.addEventListener("click", async () => {
@@ -1010,12 +1226,13 @@ slidesAdminList.querySelectorAll('[data-act="save-slide"]').forEach((btn) => {
         return;
       }
 
-SLIDES.splice(index, 1);
-await saveSlidesToBackend();
-await loadSettingsFromBackend();
-renderSlider();
-renderSlidesAdminList();
-if (slidesAdminHint) slidesAdminHint.textContent = "Слайд видалено.";
+      SLIDES.splice(index, 1);
+      await saveSlidesToBackend();
+      await loadSettingsFromBackend();
+      renderSlider();
+      renderSlidesAdminList();
+
+      if (slidesAdminHint) slidesAdminHint.textContent = "Слайд видалено.";
     });
   });
 }
@@ -1024,31 +1241,28 @@ addSlideBtn?.addEventListener("click", async () => {
   SLIDES.push({
     title: "Новий слайд",
     subtitle: "",
-    imageUrl: ""
+    imageUrl: "",
+    linkType: "none",
+    linkValue: "",
+    buttonText: ""
   });
+
   await saveSlidesToBackend();
   await loadSettingsFromBackend();
   renderSlider();
   renderSlidesAdminList();
 });
 
-async function saveSlidesToBackend() {
-  await api("/settings", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ slides: SLIDES })
-  });
-}
-
-
-let HOME_INFO_CARDS = [ {
+let HOME_INFO_CARDS = [
+  {
     title: "Швидке замовлення",
     text: "Оформлюйте кошик за кілька хвилин зі смартфона."
   },
   {
     title: "Доставка",
     text: "По Радомишлю та району — уточнюйте в магазині."
-  }];
+  }
+];
 
 /* =========================
    AUTH
@@ -1790,6 +2004,13 @@ mAdd?.addEventListener("click", () => {
 
 prevSlideBtn?.addEventListener("click", () => goToSlide(sliderIndex - 1, true));
 nextSlideBtn?.addEventListener("click", () => goToSlide(sliderIndex + 1, true));
+
+const sliderRoot = document.getElementById("slider");
+
+sliderRoot?.addEventListener("mouseenter", stopAutoSlider);
+sliderRoot?.addEventListener("mouseleave", startAutoSlider);
+sliderRoot?.addEventListener("touchstart", stopAutoSlider, { passive: true });
+sliderRoot?.addEventListener("touchend", startAutoSlider);
 
 /* =========================
    SYNC

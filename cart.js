@@ -46,9 +46,33 @@ function escapeHTML(str) {
 function parseCartKey(key) {
   const parts = String(key).split("|");
   const id = Number(parts[0]);
-  const unit = parts[1] || "шт";
-  const customNote = parts.slice(2).join("|") || "";
-  return { id, unit, customNote };
+  const variantId = Number(parts[1] || 0);
+  const customNote = decodeURIComponent(parts.slice(2).join("|") || "");
+  return { id, variantId, customNote };
+}
+
+function getCartItemData(cartValue) {
+  if (typeof cartValue === "number") {
+    return { qty: Number(cartValue) || 0 };
+  }
+
+  if (cartValue && typeof cartValue === "object") {
+    return {
+      qty: Number(cartValue.qty || 0),
+      unit: String(cartValue.unit || ""),
+      price: Number(cartValue.price || 0),
+      variantId: Number(cartValue.variantId || 0),
+      variantLabel: String(cartValue.variantLabel || ""),
+      title: String(cartValue.title || ""),
+      img: String(cartValue.img || ""),
+      brand: String(cartValue.brand || ""),
+      catId: cartValue.catId ?? null,
+      isCustomOrder: Number(cartValue.isCustomOrder || 0),
+      stockQty: Number(cartValue.stockQty ?? 0),
+    };
+  }
+
+  return { qty: 0 };
 }
 
 function formatQty(qty) {
@@ -68,16 +92,10 @@ function round1(x) {
   return Math.round(Number(x) * 10) / 10;
 }
 
-function stepByUnitType(unitType) {
-  return unitType === "length" || unitType === "weight" ? 0.1 : 1;
-}
-
-function isInStock(p) {
-  return Number(p?.stockQty || 0) > 0;
-}
-
 function productImageSrc(p) {
-  return p?.img ? p.img : "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='300' height='220' viewBox='0 0 300 220'><rect width='300' height='220' fill='%23eef2f7'/><text x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='%2394a3b8' font-family='Arial' font-size='18'>Немає фото</text></svg>";
+  return p?.img
+    ? p.img
+    : "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='300' height='220' viewBox='0 0 300 220'><rect width='300' height='220' fill='%23eef2f7'/><text x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='%2394a3b8' font-family='Arial' font-size='18'>Немає фото</text></svg>";
 }
 
 /* DOM */
@@ -118,7 +136,10 @@ function renderCart() {
 
   if (!cartList) return;
 
-  const entries = Object.entries(cart).filter(([, qty]) => Number(qty) > 0);
+  const entries = Object.entries(cart).filter(([, value]) => {
+    const item = getCartItemData(value);
+    return Number(item.qty) > 0;
+  });
 
   if (entries.length === 0) {
     cartList.innerHTML = `<div class="hint">Кошик порожній.</div>`;
@@ -143,101 +164,107 @@ function renderCart() {
   cartList.innerHTML = "";
   if (checkoutPreview) checkoutPreview.innerHTML = "";
 
-  for (const [key, qtyRaw] of entries) {
-let qty = Number(qtyRaw);
-const { id, unit, customNote } = parseCartKey(key);
+  for (const [key, rawItem] of entries) {
+    const item = getCartItemData(rawItem);
+    let qty = Number(item.qty || 0);
 
-const p = prods.find((x) => Number(x.id) === Number(id));
-if (!p) continue;
+    const { id, variantId } = parseCartKey(key);
 
-const stock = Number(p.stockQty ?? p.stock_qty ?? 0);
-const limitByStock = Number(p.isCustomOrder || 0) !== 1 && p.unitType === "pcs";
+    const p = prods.find((x) => Number(x.id) === Number(id));
+    if (!p) continue;
 
-if (limitByStock && Number.isFinite(stock) && stock >= 0 && qty > stock) {
-  qty = stock;
+    const variant = Array.isArray(p.variants)
+      ? p.variants.find((v, index) => Number(v.id ?? index) === Number(variantId))
+      : null;
 
-  const cart = getCart();
-  if (qty > 0) {
-    cart[key] = qty;
-  } else {
-    delete cart[key];
-  }
-  setCart(cart);
+    const activeUnit = item.unit || item.variantLabel || variant?.label || p.unit || "шт";
+    const activePrice = Number(item.price || variant?.price || p.price || 0);
+    const activeStock = Number(item.stockQty || variant?.stockQty || p.stockQty || 0);
+    const isCustom = Number(item.isCustomOrder || p.isCustomOrder || 0) === 1;
 
-  if (cartHint) {
-    const productTitle = p.title || p.name || "товару";
-    cartHint.textContent = `Для товару "${productTitle}" в наявності ${stock} шт. Можна додати тільки ${stock} шт.`;
-  }
-}
+    const stock = activeStock;
+    const limitByStock = !isCustom;
+
+    if (limitByStock && Number.isFinite(stock) && stock >= 0 && qty > stock) {
+      qty = stock;
+
+      const freshCart = getCart();
+      if (qty > 0) {
+        const prevItem = getCartItemData(freshCart[key]);
+        freshCart[key] = {
+          ...prevItem,
+          qty,
+        };
+      } else {
+        delete freshCart[key];
+      }
+      setCart(freshCart);
+
+      if (cartHint) {
+        const productTitle = p.title || p.name || "товару";
+        cartHint.textContent = `Для товару "${productTitle}" в наявності ${stock} шт. Можна додати тільки ${stock} шт.`;
+      }
+    }
 
     const cat = cats.find((c) => Number(c.id) === Number(p.catId));
-    const rowSum = Number(p.price) * qty;
+    const rowSum = activePrice * qty;
 
     totalQty += qty;
     totalSum += rowSum;
 
-    const step = stepByUnitType(p.unitType);
+    const stockQtyNum = Number(activeStock || 0);
 
-const stockQtyNum = Number(p.stockQty || 0);
-
-const stockText =
-  Number(p.isCustomOrder || 0) === 1
-    ? "Під замовлення"
-    : typeof p.stockQty !== "undefined"
-      ? isInStock(p)
+    const stockText = isCustom
+      ? "Під замовлення"
+      : stockQtyNum > 0
         ? `В наявності: ${stockQtyNum}`
-        : "Немає в наявності"
-      : "";
+        : "Немає в наявності";
 
-const limitedByStock =
-  Number(p.isCustomOrder || 0) !== 1 &&
-  p.unitType === "pcs" &&
-  Number.isFinite(stockQtyNum) &&
-  stockQtyNum >= 0;
+    const limitedByStock =
+      !isCustom &&
+      Number.isFinite(stockQtyNum) &&
+      stockQtyNum >= 0;
 
-const overStock =
-  limitedByStock && qty > stockQtyNum;
-
-const maxReached =
-  limitedByStock && qty >= stockQtyNum && stockQtyNum > 0;
+    const overStock = limitedByStock && qty > stockQtyNum;
+    const maxReached =
+      limitedByStock && qty >= stockQtyNum && stockQtyNum > 0;
 
     const row = document.createElement("div");
     row.className = "cartRow";
     row.innerHTML = `
-<img class="cartImg" src="${escapeHTML(productImageSrc(p))}" alt="${escapeHTML(p.title)}">
+      <img class="cartImg" src="${escapeHTML(productImageSrc(p))}" alt="${escapeHTML(p.title)}">
       <div class="cartInfo">
         <div class="cartTitle">${escapeHTML(p.title)}</div>
         <div class="cartMeta">
-          ${escapeHTML(cat ? cat.name : "Категорія")} • ${escapeHTML(p.brand || "")} • ${escapeHTML(unit)} • ${escapeHTML(stockText)}
-         ${
-  overStock
-    ? `<div class="hint" style="color:#b91c1c;margin-top:4px;">
-         В наявності ${stockQtyNum} шт. Можна додати тільки ${stockQtyNum} шт.
-       </div>`
-    : ""
-}
-${
-  maxReached && !overStock
-    ? `<div class="hint" style="color:#92400e;margin-top:4px;">
-         Досягнуто максимум: ${stockQtyNum} шт.
-       </div>`
-    : ""
-}
+          ${escapeHTML(cat ? cat.name : "Категорія")} • ${escapeHTML(item.brand || p.brand || "")} • ${escapeHTML(activeUnit)} • ${escapeHTML(stockText)}
+          ${
+            overStock
+              ? `<div class="hint" style="color:#b91c1c;margin-top:4px;">
+                   В наявності ${stockQtyNum} шт. Можна додати тільки ${stockQtyNum} шт.
+                 </div>`
+              : ""
+          }
+          ${
+            maxReached && !overStock
+              ? `<div class="hint" style="color:#92400e;margin-top:4px;">
+                   Досягнуто максимум: ${stockQtyNum} шт.
+                 </div>`
+              : ""
+          }
         </div>
       </div>
 
-      <div class="cartPrice">${formatPrice(p.price)} ₴</div>
+      <div class="cartPrice">${formatPrice(activePrice)} ₴</div>
 
       <div class="qtyBox">
         <button class="qtyBtn" data-act="minus" data-key="${escapeHTML(key)}">−</button>
         <div class="qtyNum">${formatQty(qty)}</div>
-<button
-  class="qtyBtn"
-  data-act="plus"
-  data-key="${escapeHTML(key)}"
-  data-step="${step}"
-  ${maxReached ? "disabled" : ""}
->+</button>
+        <button
+          class="qtyBtn"
+          data-act="plus"
+          data-key="${escapeHTML(key)}"
+          ${maxReached ? "disabled" : ""}
+        >+</button>
       </div>
 
       <div class="cartSum">${formatPrice(rowSum)} ₴</div>
@@ -250,10 +277,10 @@ ${
       const div = document.createElement("div");
       div.className = "chkRow";
       div.innerHTML = `
-<img class="chkImg" src="${escapeHTML(productImageSrc(p))}" alt="${escapeHTML(p.title)}">
+        <img class="chkImg" src="${escapeHTML(productImageSrc(p))}" alt="${escapeHTML(p.title)}">
         <div>
           <div class="chkName">${escapeHTML(p.title)}</div>
-          <div class="chkMeta">${formatQty(qty)} ${escapeHTML(unit)} × ${formatPrice(p.price)} ₴</div>
+          <div class="chkMeta">${formatQty(qty)} ${escapeHTML(activeUnit)} × ${formatPrice(activePrice)} ₴</div>
         </div>
         <div class="chkSum">${formatPrice(rowSum)} ₴</div>
       `;
@@ -268,34 +295,42 @@ ${
 
 function changeQty(key, delta) {
   const cart = getCart();
-  const current = Number(cart[key] || 0);
+  const current = Number(getCartItemData(cart[key]).qty || 0);
   let next = round1(current + delta);
 
   const prods = getProds();
-  const { id } = parseCartKey(key);
+  const { id, variantId } = parseCartKey(key);
   const p = prods.find((x) => Number(x.id) === Number(id));
 
-if (p) {
-  const stock = Number(p.stockQty ?? p.stock_qty ?? 0);
-  const limitByStock = Number(p.isCustomOrder || 0) !== 1 && p.unitType === "pcs";
+  if (p) {
+    const variant = Array.isArray(p.variants)
+      ? p.variants.find((v, index) => Number(v.id ?? index) === Number(variantId))
+      : null;
 
-  if (limitByStock && Number.isFinite(stock) && stock >= 0) {
-    if (next > stock) {
-      next = stock;
+    const stock = Number(variant?.stockQty ?? p.stockQty ?? 0);
+    const limitByStock = Number(p.isCustomOrder || 0) !== 1;
 
-      if (cartHint) {
-        const productTitle = p.title || p.name || "товару";
-        checkoutHint.textContent = "";
-        cartHint.textContent = `Для товару "${productTitle}" в наявності ${stock} шт. Можна додати тільки ${stock} шт.`;
+    if (limitByStock && Number.isFinite(stock) && stock >= 0) {
+      if (next > stock) {
+        next = stock;
+
+        if (cartHint) {
+          const productTitle = p.title || p.name || "товару";
+          if (checkoutHint) checkoutHint.textContent = "";
+          cartHint.textContent = `Для товару "${productTitle}" в наявності ${stock} шт. Можна додати тільки ${stock} шт.`;
+        }
       }
     }
   }
-}
 
   if (next <= 0) {
     delete cart[key];
   } else {
-    cart[key] = next;
+    const prevItem = getCartItemData(cart[key]);
+    cart[key] = {
+      ...prevItem,
+      qty: next,
+    };
   }
 
   setCart(cart);
@@ -319,37 +354,42 @@ cartList?.addEventListener("click", (e) => {
   if (!key) return;
 
   const prods = getProds();
-  const { id } = parseCartKey(key);
+  const { id, variantId } = parseCartKey(key);
   const p = prods.find((x) => Number(x.id) === id);
-  const step = p ? stepByUnitType(p.unitType) : 1;
 
-if (act === "minus") {
-  if (cartHint) cartHint.textContent = "";
-  changeQty(key, -step);
-}
-
-if (act === "plus") {
-  const cart = getCart();
-  const current = Number(cart[key] || 0);
-  const stock = Number(p?.stockQty ?? p?.stock_qty ?? 0);
-  const limitByStock = p && Number(p.isCustomOrder || 0) !== 1 && p.unitType === "pcs";
-
-  if (limitByStock && Number.isFinite(stock) && stock >= 0 && current >= stock) {
-    if (cartHint) {
-      const productTitle = p.title || p.name || "товару";
-      cartHint.textContent = `Для товару "${productTitle}" в наявності ${stock} шт. Можна додати тільки ${stock} шт.`;
-    }
+  if (act === "minus") {
+    changeQty(key, -1);
     return;
   }
 
-  if (cartHint) cartHint.textContent = "";
-  changeQty(key, +step);
-}
+  if (act === "plus") {
+    const variant = Array.isArray(p?.variants)
+      ? p.variants.find((v, index) => Number(v.id ?? index) === Number(variantId))
+      : null;
 
-if (act === "del") {
-  if (cartHint) cartHint.textContent = "";
-  deleteItem(key);
-}
+    const stock = Number(variant?.stockQty ?? p?.stockQty ?? 0);
+    const limitByStock = p && Number(p.isCustomOrder || 0) !== 1;
+
+    if (limitByStock) {
+      const cart = getCart();
+      const current = Number(getCartItemData(cart[key]).qty || 0);
+
+      if (Number.isFinite(stock) && stock >= 0 && current >= stock) {
+        if (cartHint) {
+          const productTitle = p?.title || p?.name || "товару";
+          cartHint.textContent = `Для товару "${productTitle}" в наявності ${stock} шт. Можна додати тільки ${stock} шт.`;
+        }
+        return;
+      }
+    }
+
+    changeQty(key, 1);
+    return;
+  }
+
+  if (act === "del") {
+    deleteItem(key);
+  }
 });
 
 clearCartBtn?.addEventListener("click", () => {
@@ -359,7 +399,10 @@ clearCartBtn?.addEventListener("click", () => {
 
 function openCheckout() {
   const cart = getCart();
-  const entries = Object.entries(cart).filter(([, q]) => Number(q) > 0);
+  const entries = Object.entries(cart).filter(([, value]) => {
+    const item = getCartItemData(value);
+    return Number(item.qty) > 0;
+  });
 
   if (!entries.length) {
     if (checkoutHint) checkoutHint.textContent = "Кошик порожній.";
@@ -394,7 +437,7 @@ if (cDate) {
     if (!cDate.value) return;
 
     const selected = new Date(cDate.value);
-    const day = selected.getDay(); // 0 = неділя
+    const day = selected.getDay();
 
     if (day === 0) {
       cDate.value = "";
@@ -421,23 +464,28 @@ checkoutSendBtn?.addEventListener("click", async () => {
     if (checkoutHint) checkoutHint.textContent = "Оберіть дату доставки.";
     return;
   }
+
   const selectedDate = new Date(delivery_date);
-if (selectedDate.getDay() === 0) {
-  if (checkoutHint) checkoutHint.textContent = "Неділя — вихідний. Оберіть інший день.";
-  return;
-}
+  if (selectedDate.getDay() === 0) {
+    if (checkoutHint) checkoutHint.textContent = "Неділя — вихідний. Оберіть інший день.";
+    return;
+  }
 
   if (!city || !addr || !name) {
     if (checkoutHint) checkoutHint.textContent = "Заповніть ім’я, населений пункт і адресу.";
     return;
   }
-if (!phone || !email) {
-  if (checkoutHint) checkoutHint.textContent = "Телефон і email є обов’язковими.";
-  return;
-}
+
+  if (!phone || !email) {
+    if (checkoutHint) checkoutHint.textContent = "Телефон і email є обов’язковими.";
+    return;
+  }
 
   const cart = getCart();
-  const entries = Object.entries(cart).filter(([, q]) => Number(q) > 0);
+  const entries = Object.entries(cart).filter(([, value]) => {
+    const item = getCartItemData(value);
+    return Number(item.qty) > 0;
+  });
 
   if (!entries.length) {
     if (checkoutHint) checkoutHint.textContent = "Кошик порожній.";
@@ -446,37 +494,40 @@ if (!phone || !email) {
 
   const prods = getProds();
   const items = [];
-  for (const [key, qtyRaw] of entries) {
-  const qty = Number(qtyRaw);
-  const { id } = parseCartKey(key);
-  const p = prods.find((x) => Number(x.id) === Number(id));
-  if (!p) continue;
 
-if (Number(p.isCustomOrder || 0) !== 1 && p.unitType === "pcs") {
-  const stock = Number(p.stockQty || 0);
-  if (Number.isFinite(stock) && qty > stock) {
-    const msg = `Для товару "${p.title}" в наявності ${stock} шт. Можна додати тільки ${stock} шт.`;
-    if (cartHint) cartHint.textContent = msg;
-    if (checkoutHint) checkoutHint.textContent = msg;
-    return;
+  for (const [key, rawItem] of entries) {
+    const item = getCartItemData(rawItem);
+    const qty = Number(item.qty || 0);
+    const { id, variantId } = parseCartKey(key);
+
+    const p = prods.find((x) => Number(x.id) === Number(id));
+    if (!p) continue;
+
+    const variant = Array.isArray(p.variants)
+      ? p.variants.find((v, index) => Number(v.id ?? index) === Number(variantId))
+      : null;
+
+    const unit = item.unit || item.variantLabel || variant?.label || p.unit || "шт";
+    const price = Number(item.price || variant?.price || p.price || 0);
+    const stock = Number(item.stockQty || variant?.stockQty || p.stockQty || 0);
+    const isCustom = Number(item.isCustomOrder || p.isCustomOrder || 0) === 1;
+
+    if (!isCustom && Number.isFinite(stock) && qty > stock) {
+      const msg = `Для товару "${p.title}" в наявності ${stock} шт. Можна додати тільки ${stock} шт.`;
+      if (cartHint) cartHint.textContent = msg;
+      if (checkoutHint) checkoutHint.textContent = msg;
+      return;
+    }
+
+    items.push({
+      product_id: Number(id),
+      variant_id: variant ? Number(variant.id ?? 0) : 0,
+      variant_label: unit,
+      qty,
+      unit,
+      price,
+    });
   }
-}
-}
-
-for (const [key, qtyRaw] of entries) {
-  const qty = Number(qtyRaw);
-
-  const { id, unit } = parseCartKey(key);
-
-  const p = prods.find((x) => Number(x.id) === Number(id));
-  if (!p) continue;
-
-  items.push({
-    product_id: Number(id),
-    qty: qty,
-    unit: unit || "шт"
-  });
-}
 
   if (!items.length) {
     if (checkoutHint) checkoutHint.textContent = "Не вдалося сформувати список товарів.";
@@ -490,18 +541,18 @@ for (const [key, qtyRaw] of entries) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-Order-Key": ORDER_KEY
+        "X-Order-Key": ORDER_KEY,
       },
       body: JSON.stringify({
         customer_name: name,
         customer_phone: phone,
         customer_email: email,
-        city: city,
+        city,
         address: addr,
         delivery_date,
         note: "",
-        items: items
-      })
+        items,
+      }),
     });
 
     const data = await resp.json().catch(() => null);
@@ -523,18 +574,31 @@ for (const [key, qtyRaw] of entries) {
     lines.push(`Дата доставки: ${delivery_date}`);
     lines.push(`--- Товари ---`);
 
-    for (const [key, qtyRaw] of entries) {
-      const qty = Number(qtyRaw);
-const { id, unit, customNote } = parseCartKey(key);
-      const p = prods.find((x) => Number(x.id) === id);
+    for (const [key, rawItem] of entries) {
+      const item = getCartItemData(rawItem);
+      const qty = Number(item.qty || 0);
+      const { id, variantId, customNote } = parseCartKey(key);
+
+      const p = prods.find((x) => Number(x.id) === Number(id));
       if (!p) continue;
 
-      const rowSum = Number(p.price) * qty;
+      const variant = Array.isArray(p.variants)
+        ? p.variants.find((v, index) => Number(v.id ?? index) === Number(variantId))
+        : null;
+
+      const unit = item.unit || item.variantLabel || variant?.label || p.unit || "шт";
+      const price = Number(item.price || variant?.price || p.price || 0);
+      const rowSum = price * qty;
+
       sum += rowSum;
 
       lines.push(
-        `${p.title} — ${formatQty(qty)} ${unit} × ${formatPrice(p.price)}₴ = ${formatPrice(rowSum)}₴`
+        `${p.title} — ${formatQty(qty)} ${unit} × ${formatPrice(price)}₴ = ${formatPrice(rowSum)}₴`
       );
+
+      if (customNote) {
+        lines.push(`Уточнення: ${customNote}`);
+      }
     }
 
     lines.push(`---`);
@@ -551,7 +615,9 @@ const { id, unit, customNote } = parseCartKey(key);
     if (afterConfirm) afterConfirm.hidden = false;
     if (checkoutHint) checkoutHint.textContent = "Готово! Замовлення створено.";
   } catch (e) {
-    if (checkoutHint) checkoutHint.textContent = "Помилка запиту: " + (e?.message || e);
+    if (checkoutHint) {
+      checkoutHint.textContent = "Помилка запиту: " + (e?.message || e);
+    }
   }
 });
 

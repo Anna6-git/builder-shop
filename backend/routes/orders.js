@@ -1,8 +1,6 @@
 "use strict";
 
 const express = require("express");
-
-const dns = require("dns").promises;
 const router = express.Router();
 
 const db = require("../db");
@@ -23,19 +21,35 @@ function ensureTables(cb) {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         order_id INTEGER NOT NULL,
         product_id INTEGER NOT NULL,
+        variant_id INTEGER,
+        variant_label TEXT,
         qty REAL NOT NULL,
         unit TEXT,
+        price REAL NOT NULL DEFAULT 0,
         FOREIGN KEY (order_id) REFERENCES orders(id),
         FOREIGN KEY (product_id) REFERENCES products(id)
       );`,
       (err) => {
         if (err) return cb(err);
-        cb(null);
+
+        db.run(`ALTER TABLE order_items ADD COLUMN variant_id INTEGER`, () => {
+          db.run(`ALTER TABLE order_items ADD COLUMN variant_label TEXT`, () => {
+            db.run(`ALTER TABLE order_items ADD COLUMN price REAL NOT NULL DEFAULT 0`, (alterErr) => {
+              if (
+                alterErr &&
+                !String(alterErr.message || "").includes("duplicate column name")
+              ) {
+                return cb(alterErr);
+              }
+
+              cb(null);
+            });
+          });
+        });
       }
     );
   });
 }
-
 
 async function sendOrderEmails(order, itemsDetailed = []) {
   const apiKey = String(process.env.BREVO_API_KEY || "").trim();
@@ -102,7 +116,7 @@ async function sendOrderEmails(order, itemsDetailed = []) {
     const res = await fetch("https://api.brevo.com/v3/smtp/email", {
       method: "POST",
       headers: {
-        "accept": "application/json",
+        accept: "application/json",
         "content-type": "application/json",
         "api-key": apiKey,
       },
@@ -143,8 +157,6 @@ async function sendOrderEmails(order, itemsDetailed = []) {
         subject: `Нове замовлення №${order.id} — БудМаркет`,
         text: adminText,
       });
-    } else {
-      console.warn("ADMIN_NOTIFY_EMAIL is empty");
     }
 
     if (order.email) {
@@ -154,15 +166,12 @@ async function sendOrderEmails(order, itemsDetailed = []) {
         subject: `Ваше замовлення №${order.id} — БудМаркет`,
         text: customerText,
       });
-    } else {
-      console.warn("Customer email is empty");
     }
   } catch (err) {
     console.error("Brevo send error:", err?.message || err);
   }
 }
 
-// POST /api/orders
 router.post("/", (req, res) => {
   const key = req.headers["x-order-key"];
 
@@ -184,9 +193,9 @@ router.post("/", (req, res) => {
     return res.status(400).json({ error: "customer_name, city, address required" });
   }
 
-if (!customer_phone || !customer_email) {
-  return res.status(400).json({ error: "customer_phone and customer_email required" });
-}
+  if (!customer_phone || !customer_email) {
+    return res.status(400).json({ error: "customer_phone and customer_email required" });
+  }
 
   if (!delivery_date) {
     return res.status(400).json({ error: "delivery_date required" });
@@ -199,8 +208,15 @@ if (!customer_phone || !customer_email) {
   for (const it of items) {
     const pid = Number(it.product_id);
     const qty = Number(it.qty);
+    const price = Number(it.price);
 
-    if (!Number.isInteger(pid) || !Number.isFinite(qty) || qty <= 0) {
+    if (
+      !Number.isInteger(pid) ||
+      !Number.isFinite(qty) ||
+      qty <= 0 ||
+      !Number.isFinite(price) ||
+      price < 0
+    ) {
       return res.status(400).json({ error: "invalid items format" });
     }
   }
@@ -256,7 +272,7 @@ if (!customer_phone || !customer_email) {
             if (failed) return;
 
             db.all(
-              `SELECT oi.product_id, oi.qty, oi.unit, p.name, p.price
+              `SELECT oi.product_id, oi.variant_id, oi.variant_label, oi.qty, oi.unit, oi.price, p.name
                FROM order_items oi
                LEFT JOIN products p ON p.id = oi.product_id
                WHERE oi.order_id = ?`,
@@ -274,21 +290,21 @@ if (!customer_phone || !customer_email) {
                    WHERE id = ?`,
                   [orderId],
                   (eOrder, orderRow) => {
-                  db.run("COMMIT", (eCommit) => {
-  if (eCommit) {
-    return res.status(500).json({ error: eCommit.message });
-  }
+                    db.run("COMMIT", (eCommit) => {
+                      if (eCommit) {
+                        return res.status(500).json({ error: eCommit.message });
+                      }
 
-  res.json({ ok: true, id: orderId });
+                      res.json({ ok: true, id: orderId });
 
-  if (!eOrder && orderRow) {
-    setTimeout(() => {
-      sendOrderEmails(orderRow, itemsDetailed || []).catch((err) => {
-        console.error("Background email error:", err?.message || err);
-      });
-    }, 0);
-  }
-});
+                      if (!eOrder && orderRow) {
+                        setTimeout(() => {
+                          sendOrderEmails(orderRow, itemsDetailed || []).catch((err) => {
+                            console.error("Background email error:", err?.message || err);
+                          });
+                        }, 0);
+                      }
+                    });
                   }
                 );
               }
@@ -299,47 +315,66 @@ if (!customer_phone || !customer_email) {
             const pid = Number(it.product_id);
             const qty = Number(it.qty);
             const unit = String(it.unit || "").trim();
+            const price = Number(it.price || 0);
+            const variantId = Number(it.variant_id || 0);
+            const variantLabel = String(it.variant_label || unit || "").trim();
 
             db.get(
-  "SELECT id, stock_qty, is_custom_order FROM products WHERE id = ? LIMIT 1",
-  [pid],
-  (eGet, row) => {
+              "SELECT id, stock_qty, is_custom_order FROM products WHERE id = ? LIMIT 1",
+              [pid],
+              (eGet, row) => {
                 if (eGet) return rollback(500, { error: eGet.message });
                 if (!row) return rollback(400, { error: `product ${pid} not found` });
 
-               const stock = Number(row.stock_qty);
-const isCustomOrder = Number(row.is_custom_order || 0) === 1;
+                const stock = Number(row.stock_qty);
+                const isCustomOrder = Number(row.is_custom_order || 0) === 1;
 
-if (!isCustomOrder) {
-  if (!Number.isFinite(stock) || stock < qty) {
-    return rollback(400, { error: `not enough stock for product ${pid}` });
-  }
-}
+                if (!isCustomOrder) {
+                  if (!Number.isFinite(stock) || stock < qty) {
+                    return rollback(400, { error: `not enough stock for product ${pid}` });
+                  }
+                }
 
-db.run(
-  "INSERT INTO order_items (order_id, product_id, qty, unit) VALUES (?, ?, ?, ?)",
-  [orderId, pid, qty, unit || null],
-  (eIns) => {
-    if (eIns) return rollback(500, { error: eIns.message });
+                db.run(
+                  `INSERT INTO order_items (
+                    order_id,
+                    product_id,
+                    variant_id,
+                    variant_label,
+                    qty,
+                    unit,
+                    price
+                  ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                  [
+                    orderId,
+                    pid,
+                    variantId || null,
+                    variantLabel || null,
+                    qty,
+                    unit || null,
+                    price,
+                  ],
+                  (eIns) => {
+                    if (eIns) return rollback(500, { error: eIns.message });
 
-    if (isCustomOrder) {
-      left -= 1;
-      if (left === 0) commit();
-      return;
-    }
+                    if (isCustomOrder) {
+                      left -= 1;
+                      if (left === 0) commit();
+                      return;
+                    }
 
-    db.run(
-      "UPDATE products SET stock_qty = stock_qty - ? WHERE id = ?",
-      [qty, pid],
-      (eUpd) => {
-        if (eUpd) return rollback(500, { error: eUpd.message });
+                    db.run(
+                      "UPDATE products SET stock_qty = stock_qty - ? WHERE id = ?",
+                      [qty, pid],
+                      (eUpd) => {
+                        if (eUpd) return rollback(500, { error: eUpd.message });
 
-        left -= 1;
-        if (left === 0) commit();
-      }
-    );
-  }
-);
+                        left -= 1;
+                        if (left === 0) commit();
+                      }
+                    );
+                  }
+                );
               }
             );
           });
@@ -349,7 +384,6 @@ db.run(
   });
 });
 
-// GET /api/orders?status=new|done|all
 router.get("/", auth, (req, res) => {
   const status = String(req.query.status || "all").trim().toLowerCase();
 
@@ -372,7 +406,6 @@ router.get("/", auth, (req, res) => {
   });
 });
 
-// GET /api/orders/:id
 router.get("/:id", auth, (req, res) => {
   const id = Number(req.params.id);
 
@@ -391,7 +424,7 @@ router.get("/:id", auth, (req, res) => {
       if (!order) return res.status(404).json({ error: "not found" });
 
       db.all(
-        `SELECT oi.product_id, oi.qty, oi.unit, p.name, p.price
+        `SELECT oi.product_id, oi.variant_id, oi.variant_label, oi.qty, oi.unit, oi.price, p.name
          FROM order_items oi
          LEFT JOIN products p ON p.id = oi.product_id
          WHERE oi.order_id = ?`,
@@ -405,7 +438,6 @@ router.get("/:id", auth, (req, res) => {
   );
 });
 
-// PATCH /api/orders/:id/status
 router.patch("/:id/status", auth, (req, res) => {
   const id = Number(req.params.id);
   const status = String(req.body?.status || "").trim().toLowerCase();
@@ -419,13 +451,14 @@ router.patch("/:id/status", auth, (req, res) => {
   }
 
   db.run(
-    `UPDATE orders SET status = ? WHERE id = ?`,
+    `UPDATE orders
+     SET status = ?
+     WHERE id = ?`,
     [status, id],
     function (err) {
       if (err) return res.status(500).json({ error: err.message });
       if (!this.changes) return res.status(404).json({ error: "not found" });
-
-      res.json({ ok: true, id, status });
+      res.json({ ok: true });
     }
   );
 });
