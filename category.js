@@ -8,6 +8,9 @@ const KEY_CART = "cart_v2";
 const KEY_SESSION = "current_user";
 const KEY_ADMIN_TOKEN = "admin_token";
 
+/* =========================
+   HELPERS
+========================= */
 function safeParse(raw, fallback) {
   try {
     return raw ? JSON.parse(raw) : fallback;
@@ -55,34 +58,6 @@ function isAdmin() {
   return Boolean(getAdminToken()) && u?.role === "admin";
 }
 
-async function api(path, options = {}) {
-  const token = getAdminToken();
-
-  const res = await fetch(`${API_BASE}/api${path}`, {
-    ...options,
-    headers: {
-      ...(options.headers || {}),
-      ...(token ? { Authorization: `Bearer ${token}` } : {})
-    }
-  });
-
-  const ct = res.headers.get("content-type") || "";
-  const isJson = ct.includes("application/json");
-  const data = isJson
-    ? await res.json().catch(() => null)
-    : await res.text().catch(() => null);
-
-  if (!res.ok) {
-    const msg =
-      (data && typeof data === "object" && (data.error || data.message)) ||
-      (typeof data === "string" ? data : "") ||
-      `HTTP ${res.status}`;
-    throw new Error(msg);
-  }
-
-  return data;
-}
-
 function escapeHTML(str) {
   return String(str ?? "")
     .replaceAll("&", "&amp;")
@@ -96,11 +71,6 @@ function formatPrice(n) {
   const num = Number(n);
   if (!Number.isFinite(num)) return "0.00";
   return num.toFixed(2);
-}
-
-function priceUnitText(product) {
-  const unit = String(product?.unit || "").trim();
-  return unit ? `за ${unit}` : "за шт";
 }
 
 function productImageSrc(p) {
@@ -120,27 +90,123 @@ function getCategoryIdFromUrl() {
   return Number(params.get("cat"));
 }
 
+function parseLooseNumber(value) {
+  const raw = String(value ?? "").trim().replace(",", ".");
+  if (!raw) return NaN;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : NaN;
+}
+
+function normalizeVariantsForClient(product) {
+  const variants = Array.isArray(product?.variants) ? product.variants : [];
+
+  if (variants.length) {
+    return variants
+      .map((v, index) => ({
+        id: Number.isFinite(Number(v?.id)) ? Number(v.id) : index,
+        label: String(v?.label || "").trim(),
+        price: Number(v?.price),
+        stockQty: Number(v?.stockQty ?? 0),
+        sortOrder: Number.isFinite(Number(v?.sortOrder)) ? Number(v.sortOrder) : index,
+      }))
+      .filter(
+        (v) =>
+          v.label &&
+          Number.isFinite(v.price) &&
+          v.price >= 0 &&
+          Number.isFinite(v.stockQty) &&
+          v.stockQty >= 0
+      );
+  }
+
+  const fallbackLabel = String(product?.unit || "").trim();
+  const fallbackPrice = Number(product?.price);
+  const fallbackStock = Number(product?.stockQty ?? 0);
+
+  if (
+    fallbackLabel &&
+    Number.isFinite(fallbackPrice) &&
+    fallbackPrice >= 0 &&
+    Number.isFinite(fallbackStock) &&
+    fallbackStock >= 0
+  ) {
+    return [
+      {
+        id: 0,
+        label: fallbackLabel,
+        price: fallbackPrice,
+        stockQty: fallbackStock,
+        sortOrder: 0,
+      },
+    ];
+  }
+
+  return [];
+}
+
+function firstVariant(product) {
+  const variants = normalizeVariantsForClient(product);
+  return variants.length ? variants[0] : null;
+}
+
+function productCardPriceText(product) {
+  const v = firstVariant(product);
+  return formatPrice(v ? v.price : product?.price || 0);
+}
+
+function productCardUnitText(product) {
+  const v = firstVariant(product);
+  return v?.label || product?.unit || "шт";
+}
+
+/* =========================
+   API
+========================= */
+async function api(path, options = {}) {
+  const token = getAdminToken();
+
+  const res = await fetch(`${API_BASE}/api${path}`, {
+    ...options,
+    headers: {
+      ...(options.headers || {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+
+  const ct = res.headers.get("content-type") || "";
+  const isJson = ct.includes("application/json");
+  const data = isJson
+    ? await res.json().catch(() => null)
+    : await res.text().catch(() => null);
+
+  if (!res.ok) {
+    const msg =
+      (data && typeof data === "object" && (data.error || data.message)) ||
+      (typeof data === "string" ? data : "") ||
+      `HTTP ${res.status}`;
+    throw new Error(msg);
+  }
+
+  return data;
+}
+
 async function syncFromApi() {
   try {
-    const [catsRes, prodsRes] = await Promise.all([
-      fetch(`${API_BASE}/api/categories`),
-      fetch(`${API_BASE}/api/products`)
+    const [cats, prods] = await Promise.all([
+      api("/categories", { method: "GET" }),
+      api("/products", { method: "GET" }),
     ]);
 
-    if (catsRes.ok) {
-      const cats = await catsRes.json();
-      if (Array.isArray(cats)) setCats(cats);
-    }
-
-    if (prodsRes.ok) {
-      const prods = await prodsRes.json();
-      if (Array.isArray(prods)) setProds(prods);
-    }
+    if (Array.isArray(cats)) setCats(cats);
+    if (Array.isArray(prods)) setProds(prods);
   } catch (e) {
     console.warn("syncFromApi failed:", e);
   }
 }
 
+/* =========================
+   DOM
+========================= */
 const categoryBackBtn = document.getElementById("categoryBackBtn");
 const cartCount = document.getElementById("cartCount");
 const categoryTitle = document.getElementById("categoryTitle");
@@ -171,6 +237,9 @@ const productFormHint = document.getElementById("productFormHint");
 
 let editingProductId = null;
 
+/* =========================
+   BASIC UI
+========================= */
 function updateCartBadge() {
   if (cartCount) cartCount.textContent = String(cartUniqueProductsCount());
 }
@@ -185,8 +254,12 @@ function goBackSmart() {
 
 function fillProductCategorySelect(selectedId = null) {
   const cats = getCats().slice().sort((a, b) =>
-    String(a.name || "").localeCompare(String(b.name || ""), "uk", { sensitivity: "base" })
+    String(a.name || "").localeCompare(String(b.name || ""), "uk", {
+      sensitivity: "base",
+    })
   );
+
+  if (!pCategoryInput) return;
 
   pCategoryInput.innerHTML = "";
 
@@ -199,45 +272,65 @@ function fillProductCategorySelect(selectedId = null) {
   });
 }
 
+/* =========================
+   ADMIN MODAL
+========================= */
 function openProductAdminModal(product = null) {
   if (!isAdmin()) return;
 
   editingProductId = product?.id || null;
-  adminProductTitle.textContent = product ? "Редагувати товар" : "Додати товар";
+  if (adminProductTitle) {
+    adminProductTitle.textContent = product ? "Редагувати товар" : "Додати товар";
+  }
 
   fillProductCategorySelect(product?.catId || getCategoryIdFromUrl() || null);
 
-  pTitleInput.value = product?.title || "";
-  pPriceInput.value = product ? Number(product.price).toFixed(2) : "";
-  pBrandInput.value = product?.brand || "";
-  pUnitInput.value = product?.unit || "";
-  pOrderTypeInput.value = Number(product?.isCustomOrder || 0) === 1 ? "custom" : "stock";
-  pStockInput.value = product ? String(product.stockQty ?? 0) : "0";
-  pDescInput.value = product?.description || "";
-  pImgInput.value = product?.img || "";
-  pFileInput.value = "";
-  productFormHint.textContent = "";
+  const fv = firstVariant(product);
 
-  if (product?.img) {
-    pPreview.src = product.img;
-    pPreview.hidden = false;
-  } else {
-    pPreview.hidden = true;
-    pPreview.removeAttribute("src");
+  if (pTitleInput) pTitleInput.value = product?.title || "";
+  if (pPriceInput) pPriceInput.value = fv ? String(fv.price ?? "") : "";
+  if (pBrandInput) pBrandInput.value = product?.brand || "";
+  if (pUnitInput) pUnitInput.value = fv?.label || "";
+  if (pOrderTypeInput) {
+    pOrderTypeInput.value = Number(product?.isCustomOrder || 0) === 1 ? "custom" : "stock";
+  }
+  if (pStockInput) pStockInput.value = fv ? String(fv.stockQty ?? 0) : "0";
+  if (pDescInput) pDescInput.value = product?.description || "";
+  if (pImgInput) pImgInput.value = product?.img || "";
+  if (pFileInput) pFileInput.value = "";
+  if (productFormHint) productFormHint.textContent = "";
+
+  if (pPreview) {
+    if (product?.img) {
+      pPreview.src = product.img;
+      pPreview.hidden = false;
+    } else {
+      pPreview.hidden = true;
+      pPreview.removeAttribute("src");
+    }
   }
 
-  adminProductOverlay.hidden = false;
-  adminProductModal.hidden = false;
-  adminProductModal.setAttribute("aria-hidden", "false");
+  if (deleteProductBtn) deleteProductBtn.hidden = !product;
+
+  if (adminProductOverlay) adminProductOverlay.hidden = false;
+  if (adminProductModal) {
+    adminProductModal.hidden = false;
+    adminProductModal.setAttribute("aria-hidden", "false");
+  }
 }
 
 function closeProductAdminModal() {
-  adminProductOverlay.hidden = true;
-  adminProductModal.hidden = true;
-  adminProductModal.setAttribute("aria-hidden", "true");
+  if (adminProductOverlay) adminProductOverlay.hidden = true;
+  if (adminProductModal) {
+    adminProductModal.hidden = true;
+    adminProductModal.setAttribute("aria-hidden", "true");
+  }
   editingProductId = null;
 }
 
+/* =========================
+   RENDER
+========================= */
 function renderCategoryPage() {
   const catId = getCategoryIdFromUrl();
   const cats = getCats();
@@ -257,7 +350,9 @@ function renderCategoryPage() {
   const list = prods
     .filter((p) => Number(p.catId) === Number(cat.id))
     .sort((a, b) =>
-      String(a.title || "").localeCompare(String(b.title || ""), "uk", { sensitivity: "base" })
+      String(a.title || "").localeCompare(String(b.title || ""), "uk", {
+        sensitivity: "base",
+      })
     );
 
   document.title = `${cat.name} — БудМаркет`;
@@ -281,16 +376,25 @@ function renderCategoryPage() {
     const card = document.createElement("article");
     card.className = "prodCard";
 
+    const fv = firstVariant(p);
+    const stockText =
+      Number(p.isCustomOrder || 0) === 1
+        ? "Під замовлення"
+        : Number(fv?.stockQty ?? p.stockQty ?? 0) > 0
+          ? `В наявності: ${Number(fv?.stockQty ?? p.stockQty ?? 0)}`
+          : "Немає в наявності";
+
     card.innerHTML = `
       <div class="prodCard__main">
         <img class="prodImg" src="${escapeHTML(productImageSrc(p))}" alt="${escapeHTML(p.title)}">
         <div class="prodBody">
           <h3 class="prodTitle">${escapeHTML(p.title)}</h3>
           <p class="prodMeta">
-            ${escapeHTML(p.brand || "")}${p.brand ? " • " : ""}${escapeHTML(priceUnitText(p))}
+            ${escapeHTML(p.brand || "")}${p.brand ? " • " : ""}${escapeHTML(productCardUnitText(p))}
           </p>
+          <p class="prodMeta">${escapeHTML(stockText)}</p>
           <div class="prodBottom">
-            <div class="prodPrice">${formatPrice(p.price)} ₴</div>
+            <div class="prodPrice">${productCardPriceText(p)} ₴</div>
           </div>
         </div>
       </div>
@@ -338,6 +442,9 @@ function renderCategoryPage() {
   });
 }
 
+/* =========================
+   UPLOAD
+========================= */
 async function uploadImage(file) {
   const token = getAdminToken();
   const form = new FormData();
@@ -354,6 +461,9 @@ async function uploadImage(file) {
   return data?.url || "";
 }
 
+/* =========================
+   EVENTS
+========================= */
 categoryBackBtn?.addEventListener("click", goBackSmart);
 
 adminAddProductBtn?.addEventListener("click", () => {
@@ -364,63 +474,100 @@ adminProductClose?.addEventListener("click", closeProductAdminModal);
 adminProductOverlay?.addEventListener("click", closeProductAdminModal);
 
 pImgInput?.addEventListener("input", () => {
-  const url = (pImgInput.value || "").trim();
+  const url = String(pImgInput?.value || "").trim();
+
+  if (!pPreview) return;
+
   if (url) {
     pPreview.src = url;
     pPreview.hidden = false;
   } else {
     pPreview.hidden = true;
+    pPreview.removeAttribute("src");
   }
 });
 
 pFileInput?.addEventListener("change", async () => {
-  const file = pFileInput.files?.[0];
+  const file = pFileInput?.files?.[0];
   if (!file) return;
 
   try {
-    productFormHint.textContent = "Завантажую фото...";
+    if (productFormHint) productFormHint.textContent = "Завантажую фото...";
     const url = await uploadImage(file);
-    pImgInput.value = url;
-    pPreview.src = url;
-    pPreview.hidden = false;
-    productFormHint.textContent = "Фото завантажено.";
+
+    if (pImgInput) pImgInput.value = url;
+    if (pPreview) {
+      pPreview.src = url;
+      pPreview.hidden = false;
+    }
+
+    if (productFormHint) productFormHint.textContent = "Фото завантажено.";
   } catch (e) {
-    productFormHint.textContent = "Помилка: " + e.message;
+    if (productFormHint) productFormHint.textContent = "Помилка: " + e.message;
   }
 });
 
 saveProductBtn?.addEventListener("click", async () => {
   try {
+    const title = String(pTitleInput?.value || "").trim();
+    const catId = Number(pCategoryInput?.value);
+    const price = parseLooseNumber(pPriceInput?.value);
+    const brand = String(pBrandInput?.value || "").trim();
+    const unitLabel = String(pUnitInput?.value || "").trim();
+    const stockQty = parseLooseNumber(pStockInput?.value);
+    const description = String(pDescInput?.value || "").trim();
+    const img = String(pImgInput?.value || "").trim();
+    const isCustomOrder = pOrderTypeInput?.value === "custom" ? 1 : 0;
+
+    if (!title) {
+      if (productFormHint) productFormHint.textContent = "Введіть назву товару.";
+      return;
+    }
+
+    if (!Number.isFinite(catId)) {
+      if (productFormHint) productFormHint.textContent = "Оберіть категорію.";
+      return;
+    }
+
+    if (!brand) {
+      if (productFormHint) productFormHint.textContent = "Введіть виробника.";
+      return;
+    }
+
+    if (!unitLabel) {
+      if (productFormHint) productFormHint.textContent = "Введіть фасування, наприклад 0.9кг.";
+      return;
+    }
+
+    if (!Number.isFinite(price) || price < 0) {
+      if (productFormHint) productFormHint.textContent = "Невірна ціна.";
+      return;
+    }
+
+    if (!Number.isFinite(stockQty) || stockQty < 0) {
+      if (productFormHint) productFormHint.textContent = "Невірна кількість на складі.";
+      return;
+    }
+
     const payload = {
-      title: String(pTitleInput.value || "").trim(),
-      catId: Number(pCategoryInput.value),
-      price: Number(String(pPriceInput.value || "").replace(",", ".")),
-      brand: String(pBrandInput.value || "").trim(),
-      unit: String(pUnitInput.value || "").trim() || "шт",
-      unitType: "pcs",
-      stockQty: Number(pStockInput.value || 0),
-      description: String(pDescInput.value || "").trim(),
-      img: String(pImgInput.value || "").trim(),
-      isCustomOrder: pOrderTypeInput?.value === "custom" ? 1 : 0,
-      isActive: 1
+      title,
+      catId,
+      brand,
+      img,
+      description,
+      isCustomOrder,
+      isActive: 1,
+      variants: [
+        {
+          label: unitLabel,
+          price,
+          stockQty,
+          sortOrder: 0,
+        },
+      ],
     };
 
-    if (!payload.title) {
-      productFormHint.textContent = "Введіть назву товару.";
-      return;
-    }
-
-    if (!Number.isFinite(payload.price) || payload.price < 0) {
-      productFormHint.textContent = "Невірна ціна.";
-      return;
-    }
-
-    if (!Number.isFinite(payload.stockQty) || payload.stockQty < 0) {
-      productFormHint.textContent = "Невірна кількість на складі.";
-      return;
-    }
-
-    productFormHint.textContent = "Зберігаю...";
+    if (productFormHint) productFormHint.textContent = "Зберігаю...";
 
     if (editingProductId) {
       await api(`/products/${editingProductId}`, {
@@ -440,7 +587,7 @@ saveProductBtn?.addEventListener("click", async () => {
     renderCategoryPage();
     closeProductAdminModal();
   } catch (e) {
-    productFormHint.textContent = "Помилка: " + e.message;
+    if (productFormHint) productFormHint.textContent = "Помилка: " + e.message;
   }
 });
 
@@ -456,7 +603,7 @@ deleteProductBtn?.addEventListener("click", async () => {
     renderCategoryPage();
     closeProductAdminModal();
   } catch (e) {
-    productFormHint.textContent = "Помилка: " + e.message;
+    if (productFormHint) productFormHint.textContent = "Помилка: " + e.message;
   }
 });
 
@@ -470,6 +617,9 @@ function refreshAdminUI() {
   });
 }
 
+/* =========================
+   INIT
+========================= */
 (async function initCategoryPage() {
   updateCartBadge();
   refreshAdminUI();
