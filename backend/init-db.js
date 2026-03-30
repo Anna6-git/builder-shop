@@ -16,41 +16,52 @@ function getOne(sql, params = []) {
 }
 
 async function initDb() {
-  await run(`
-    CREATE TABLE IF NOT EXISTS categories (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
-      icon TEXT,
-      image_url TEXT,
-      display_order INTEGER DEFAULT 9999
-    );
-  `);
-
 await run(`
-  CREATE TABLE IF NOT EXISTS products (
+  CREATE TABLE IF NOT EXISTS product_variants (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    price REAL NOT NULL DEFAULT 0,
-    category_id INTEGER,
-    description TEXT,
-    image_url TEXT,
-    brand TEXT,
-    unit TEXT DEFAULT 'шт',
-    unit_type TEXT DEFAULT 'pcs',
+    product_id INTEGER NOT NULL,
+    label TEXT NOT NULL,
+    price REAL NOT NULL,
     stock_qty REAL NOT NULL DEFAULT 0,
-    is_active INTEGER NOT NULL DEFAULT 1,
-    is_custom_order INTEGER NOT NULL DEFAULT 0,
-    custom_note_placeholder TEXT DEFAULT '',
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now')),
-    code TEXT,
-    related_ids TEXT DEFAULT '[]',
-    FOREIGN KEY (category_id) REFERENCES categories(id)
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
   );
 `);
 
-await run(`ALTER TABLE products ADD COLUMN is_custom_order INTEGER NOT NULL DEFAULT 0;`).catch(() => {});
-await run(`ALTER TABLE products ADD COLUMN custom_note_placeholder TEXT DEFAULT '';`).catch(() => {});
+  await run(`
+    CREATE TABLE IF NOT EXISTS products (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      price REAL NOT NULL DEFAULT 0,
+      category_id INTEGER,
+      description TEXT,
+      image_url TEXT,
+      brand TEXT,
+      unit TEXT DEFAULT 'шт',
+      unit_type TEXT DEFAULT 'pcs',
+      stock_qty REAL NOT NULL DEFAULT 0,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      is_custom_order INTEGER NOT NULL DEFAULT 0,
+      custom_note_placeholder TEXT DEFAULT '',
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
+      code TEXT,
+      related_ids TEXT DEFAULT '[]',
+      FOREIGN KEY (category_id) REFERENCES categories(id)
+    );
+  `);
+
+  await run(`
+    CREATE TABLE IF NOT EXISTS product_variants (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      product_id INTEGER NOT NULL,
+      label TEXT NOT NULL,
+      price REAL NOT NULL DEFAULT 0,
+      stock_qty REAL NOT NULL DEFAULT 0,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+    );
+  `);
 
   await run(`
     CREATE TABLE IF NOT EXISTS orders (
@@ -75,9 +86,8 @@ await run(`ALTER TABLE products ADD COLUMN custom_note_placeholder TEXT DEFAULT 
     );
   `);
 
-  await run(`ALTER TABLE orders ADD COLUMN email TEXT;`).catch(() => {});
-  await run(`ALTER TABLE orders ADD COLUMN note TEXT;`).catch(() => {});
-  await run(`ALTER TABLE orders ADD COLUMN delivery_date TEXT;`).catch(() => {});
+  await run(`ALTER TABLE products ADD COLUMN is_custom_order INTEGER NOT NULL DEFAULT 0;`).catch(() => {});
+  await run(`ALTER TABLE products ADD COLUMN custom_note_placeholder TEXT DEFAULT '';`).catch(() => {});
   await run(`ALTER TABLE products ADD COLUMN unit TEXT DEFAULT 'шт';`).catch(() => {});
   await run(`ALTER TABLE products ADD COLUMN unit_type TEXT DEFAULT 'pcs';`).catch(() => {});
   await run(`ALTER TABLE products ADD COLUMN code TEXT;`).catch(() => {});
@@ -85,6 +95,9 @@ await run(`ALTER TABLE products ADD COLUMN custom_note_placeholder TEXT DEFAULT 
   await run(`ALTER TABLE categories ADD COLUMN icon TEXT;`).catch(() => {});
   await run(`ALTER TABLE categories ADD COLUMN image_url TEXT;`).catch(() => {});
   await run(`ALTER TABLE categories ADD COLUMN display_order INTEGER DEFAULT 9999;`).catch(() => {});
+  await run(`ALTER TABLE orders ADD COLUMN email TEXT;`).catch(() => {});
+  await run(`ALTER TABLE orders ADD COLUMN note TEXT;`).catch(() => {});
+  await run(`ALTER TABLE orders ADD COLUMN delivery_date TEXT;`).catch(() => {});
 
   await run(`
     CREATE TABLE IF NOT EXISTS admins (
@@ -116,7 +129,7 @@ await run(`ALTER TABLE products ADD COLUMN custom_note_placeholder TEXT DEFAULT 
     await run(
       `INSERT INTO admins (email, password_hash)
        VALUES (?, ?)
-       ON CONFLICT(email) DO UPDATE SET password_hash=excluded.password_hash`,
+       ON CONFLICT(email) DO UPDATE SET password_hash = excluded.password_hash`,
       [envEmail, hash]
     );
   }

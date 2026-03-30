@@ -326,43 +326,46 @@ router.post("/", (req, res) => {
                 if (eGet) return rollback(500, { error: eGet.message });
                 if (!row) return rollback(400, { error: `product ${pid} not found` });
 
-                const stock = Number(row.stock_qty);
                 const isCustomOrder = Number(row.is_custom_order || 0) === 1;
 
-                if (!isCustomOrder) {
-                  if (!Number.isFinite(stock) || stock < qty) {
-                    return rollback(400, { error: `not enough stock for product ${pid}` });
+                const afterInsert = () => {
+                  if (isCustomOrder) {
+                    left -= 1;
+                    if (left === 0) commit();
+                    return;
                   }
-                }
 
-                db.run(
-                  `INSERT INTO order_items (
-                    order_id,
-                    product_id,
-                    variant_id,
-                    variant_label,
-                    qty,
-                    unit,
-                    price
-                  ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-                  [
-                    orderId,
-                    pid,
-                    variantId || null,
-                    variantLabel || null,
-                    qty,
-                    unit || null,
-                    price,
-                  ],
-                  (eIns) => {
-                    if (eIns) return rollback(500, { error: eIns.message });
+                  if (variantId > 0) {
+                    db.run(
+                      `UPDATE product_variants
+                       SET stock_qty = stock_qty - ?
+                       WHERE id = ? AND product_id = ?`,
+                      [qty, variantId, pid],
+                      function (eUpdVariant) {
+                        if (eUpdVariant) return rollback(500, { error: eUpdVariant.message });
+                        if (!this.changes) {
+                          return rollback(400, { error: `variant ${variantId} not found for product ${pid}` });
+                        }
 
-                    if (isCustomOrder) {
-                      left -= 1;
-                      if (left === 0) commit();
-                      return;
-                    }
+                        db.run(
+                          `UPDATE products
+                           SET stock_qty = COALESCE((
+                             SELECT SUM(stock_qty)
+                             FROM product_variants
+                             WHERE product_id = ?
+                           ), 0)
+                           WHERE id = ?`,
+                          [pid, pid],
+                          (eUpdProduct) => {
+                            if (eUpdProduct) return rollback(500, { error: eUpdProduct.message });
 
+                            left -= 1;
+                            if (left === 0) commit();
+                          }
+                        );
+                      }
+                    );
+                  } else {
                     db.run(
                       "UPDATE products SET stock_qty = stock_qty - ? WHERE id = ?",
                       [qty, pid],
@@ -374,7 +377,69 @@ router.post("/", (req, res) => {
                       }
                     );
                   }
-                );
+                };
+
+                const insertOrderItem = () => {
+                  db.run(
+                    `INSERT INTO order_items (
+                      order_id,
+                      product_id,
+                      variant_id,
+                      variant_label,
+                      qty,
+                      unit,
+                      price
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                    [
+                      orderId,
+                      pid,
+                      variantId || null,
+                      variantLabel || null,
+                      qty,
+                      unit || null,
+                      price,
+                    ],
+                    (eIns) => {
+                      if (eIns) return rollback(500, { error: eIns.message });
+                      afterInsert();
+                    }
+                  );
+                };
+
+                if (isCustomOrder) {
+                  insertOrderItem();
+                  return;
+                }
+
+                if (variantId > 0) {
+                  db.get(
+                    `SELECT id, stock_qty
+                     FROM product_variants
+                     WHERE id = ? AND product_id = ?
+                     LIMIT 1`,
+                    [variantId, pid],
+                    (eVar, variantRow) => {
+                      if (eVar) return rollback(500, { error: eVar.message });
+                      if (!variantRow) {
+                        return rollback(400, { error: `variant ${variantId} not found for product ${pid}` });
+                      }
+
+                      const variantStock = Number(variantRow.stock_qty);
+                      if (!Number.isFinite(variantStock) || variantStock < qty) {
+                        return rollback(400, { error: `not enough stock for variant ${variantId}` });
+                      }
+
+                      insertOrderItem();
+                    }
+                  );
+                } else {
+                  const stock = Number(row.stock_qty);
+                  if (!Number.isFinite(stock) || stock < qty) {
+                    return rollback(400, { error: `not enough stock for product ${pid}` });
+                  }
+
+                  insertOrderItem();
+                }
               }
             );
           });

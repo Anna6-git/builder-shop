@@ -1721,106 +1721,6 @@ addInfoCardBtn?.addEventListener("click", async () => {
   renderInfoAdminList();
 });
 
-function fillProductCategorySelect(selectedId = null) {
-  if (!pCategoryInput) return;
-
-  const cats = getCats().slice().sort((a, b) => (a.order ?? 9999) - (b.order ?? 9999));
-  pCategoryInput.innerHTML = "";
-
-  cats.forEach((c) => {
-    const opt = document.createElement("option");
-    opt.value = String(c.id);
-    opt.textContent = c.name;
-    if (Number(selectedId) === Number(c.id)) opt.selected = true;
-    pCategoryInput.appendChild(opt);
-  });
-}
-
-function openProductAdminModal(product = null) {
-  if (!isAdmin()) return;
-
-  editingProductId = product?.id || null;
-  if (adminProductTitle) {
-    adminProductTitle.textContent = product ? "Редагувати товар" : "Додати товар";
-  }
-
-  fillProductCategorySelect(product?.catId || activeCatId || getCats()?.[0]?.id || null);
-
-if (pTitleInput) pTitleInput.value = product?.title || "";
-if (pPriceInput) pPriceInput.value = product ? Number(product.price).toFixed(2) : "";
-if (pBrandInput) pBrandInput.value = product?.brand || "";
-if (pUnitInput) pUnitInput.value = product?.unit || "";
-if (pOrderTypeInput) pOrderTypeInput.value = Number(product?.isCustomOrder || 0) === 1 ? "custom" : "stock";
-if (pCustomNoteInput) pCustomNoteInput.value = product?.customNotePlaceholder || "";
-if (pIdInput) pIdInput.value = product?.id ? String(product.id) : "Створиться автоматично";
-if (pStockInput) pStockInput.value = product ? String(product.stockQty ?? 0) : "0";
-if (pDescInput) pDescInput.value = product?.description || "";
-if (pRelatedInput) {
-  pRelatedInput.value = Array.isArray(product?.relatedIds) ? product.relatedIds.join(",") : "";
-}
-  if (pImgInput) pImgInput.value = product?.img || "";
-  if (pFileInput) pFileInput.value = "";
-  if (productFormHint) productFormHint.textContent = "";
-
-  if (pPreview) {
-    if (product?.img) {
-      pPreview.src = product.img;
-      pPreview.hidden = false;
-    } else {
-      pPreview.hidden = true;
-      pPreview.removeAttribute("src");
-    }
-  }
-
-  if (deleteProductBtn) deleteProductBtn.hidden = !product;
-  if (adminProductOverlay) adminProductOverlay.hidden = false;
-  if (adminProductModal) adminProductModal.hidden = false;
-}
-
-function closeProductAdminModal() {
-  if (adminProductOverlay) adminProductOverlay.hidden = true;
-  if (adminProductModal) adminProductModal.hidden = true;
-  editingProductId = null;
-}
-
-adminProductClose?.addEventListener("click", closeProductAdminModal);
-adminProductOverlay?.addEventListener("click", closeProductAdminModal);
-adminAddProductBtn?.addEventListener("click", () => openProductAdminModal());
-adminEditCurrentBtn?.addEventListener("click", () => {
-  if (currentProduct) openProductAdminModal(currentProduct);
-});
-
-pImgInput?.addEventListener("input", () => {
-  const url = String(pImgInput.value || "").trim();
-  if (!pPreview) return;
-
-  if (url) {
-    pPreview.src = url;
-    pPreview.hidden = false;
-  } else {
-    pPreview.hidden = true;
-    pPreview.removeAttribute("src");
-  }
-});
-
-pFileInput?.addEventListener("change", async () => {
-  const file = pFileInput.files?.[0];
-  if (!file) return;
-
-  try {
-    if (productFormHint) productFormHint.textContent = "Завантажую фото...";
-    const url = await uploadImage(file);
-    if (pImgInput) pImgInput.value = url;
-    if (pPreview) {
-      pPreview.src = url;
-      pPreview.hidden = false;
-    }
-    if (productFormHint) productFormHint.textContent = "Фото завантажено.";
-  } catch (e) {
-    if (productFormHint) productFormHint.textContent = "Помилка: " + e.message;
-  }
-});
-
 saveProductBtn?.addEventListener("click", async () => {
   try {
     const relatedIds = String(pRelatedInput?.value || "")
@@ -1828,31 +1728,55 @@ saveProductBtn?.addEventListener("click", async () => {
       .map((x) => Number(String(x).trim()))
       .filter((x) => Number.isFinite(x));
 
-const payload = {
-  title: String(pTitleInput.value || "").trim(),
-  catId: Number(pCategoryInput.value),
-  price: Number(String(pPriceInput.value || "").replace(",", ".")),
-  brand: String(pBrandInput.value || "").trim(),
-  unit: String(pUnitInput.value || "").trim() || "шт",
-  unitType: "pcs",
-  stockQty: Number(pStockInput.value || 0),
-  description: String(pDescInput.value || "").trim(),
-  img: String(pImgInput.value || "").trim(),
-  isCustomOrder: pOrderTypeInput?.value === "custom" ? 1 : 0,
-  customNotePlaceholder: String(pCustomNoteInput?.value || "").trim(),
-  isActive: 1
-};
+    const variants = collectSiteAdminVariants();
+
+    if (!variants.length) {
+      if (productFormHint) productFormHint.textContent = "Додай хоча б одне фасування.";
+      return;
+    }
+
+    for (const v of variants) {
+      if (!v.label) {
+        if (productFormHint) productFormHint.textContent = "У кожного фасування має бути назва.";
+        return;
+      }
+
+      if (!Number.isFinite(v.price) || v.price < 0) {
+        if (productFormHint) productFormHint.textContent = `Невірна ціна для "${v.label}".`;
+        return;
+      }
+
+      if (!Number.isFinite(v.stockQty) || v.stockQty < 0) {
+        if (productFormHint) productFormHint.textContent = `Невірна кількість для "${v.label}".`;
+        return;
+      }
+    }
+
+    const payload = {
+      title: String(pTitleInput?.value || "").trim(),
+      catId: Number(pCategoryInput?.value),
+      brand: String(pBrandInput?.value || "").trim(),
+      description: String(pDescInput?.value || "").trim(),
+      img: String(pImgInput?.value || "").trim(),
+      relatedIds,
+      isCustomOrder: pOrderTypeInput?.value === "custom" ? 1 : 0,
+      customNotePlaceholder: String(pCustomNoteInput?.value || "").trim(),
+      isActive: 1,
+      variants
+    };
 
     if (!payload.title) {
       if (productFormHint) productFormHint.textContent = "Введіть назву товару.";
       return;
     }
-    if (!Number.isFinite(payload.price) || payload.price < 0) {
-      if (productFormHint) productFormHint.textContent = "Вкажіть правильну ціну.";
+
+    if (!Number.isFinite(payload.catId) || payload.catId <= 0) {
+      if (productFormHint) productFormHint.textContent = "Оберіть категорію.";
       return;
     }
-    if (!Number.isFinite(payload.stockQty) || payload.stockQty < 0) {
-      if (productFormHint) productFormHint.textContent = "Вкажіть правильну кількість.";
+
+    if (!payload.brand) {
+      if (productFormHint) productFormHint.textContent = "Введіть виробника.";
       return;
     }
 
@@ -1878,34 +1802,17 @@ const payload = {
     if (activeCatId) {
       const list = getProds().filter((p) => Number(p.catId) === Number(activeCatId));
       renderProducts(list, catById(getCats(), activeCatId)?.name || "Товари");
+    } else {
+      renderCatalog();
+    }
+
+    if (editingProductId) {
+      const updated = getProds().find((p) => Number(p.id) === Number(editingProductId));
+      if (updated) currentProduct = updated;
     }
   } catch (e) {
     if (productFormHint) productFormHint.textContent = "Помилка: " + e.message;
   }
-});
-
-async function deleteProduct(id) {
-  if (!isAdmin()) return;
-  const ok = confirm("Видалити товар?");
-  if (!ok) return;
-
-  try {
-    await api(`/products/${id}`, { method: "DELETE" });
-    await syncFromApi();
-
-    if (activeCatId) {
-      const list = getProds().filter((p) => Number(p.catId) === Number(activeCatId));
-      renderProducts(list, catById(getCats(), activeCatId)?.name || "Товари");
-    }
-  } catch (e) {
-    alert("Помилка: " + e.message);
-  }
-}
-
-deleteProductBtn?.addEventListener("click", async () => {
-  if (!editingProductId) return;
-  await deleteProduct(editingProductId);
-  closeProductAdminModal();
 });
 
 /* =========================
