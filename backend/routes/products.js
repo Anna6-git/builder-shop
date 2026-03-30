@@ -377,71 +377,80 @@ router.post("/", auth, (req, res) => {
   });
 
   if (!name) {
-    res.status(400).json({ error: "title/name required" });
-    return;
+    return res.status(400).json({ error: "title/name required" });
   }
 
   if (!variants.length) {
-    res.status(400).json({ error: "variants required" });
-    return;
+    return res.status(400).json({ error: "variants required" });
   }
 
   const firstVariant = variants[0];
   const totalStock = variants.reduce((sum, v) => sum + Number(v.stockQty || 0), 0);
 
-  db.run(
-    `INSERT INTO products (
-      name,
-      price,
-      category_id,
-      description,
-      image_url,
-      brand,
-      unit,
-      unit_type,
-      stock_qty,
-      is_active,
-      is_custom_order,
-      custom_note_placeholder,
-      created_at,
-      updated_at,
-      code,
-      related_ids
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'), ?, ?)`,
-    [
-      name,
-      firstVariant.price,
-      category_id,
-      description,
-      image_url,
-      brand,
-      firstVariant.label,
-      "variant",
-      totalStock,
-      is_active,
-      is_custom_order,
-      custom_note_placeholder,
-      code,
-      related_ids,
-    ],
-    function (err) {
-      if (err) {
-        res.status(500).json({ error: err.message });
-        return;
-      }
+  db.serialize(() => {
+    db.run("BEGIN TRANSACTION");
 
-      const productId = this.lastID;
-
-      replaceVariants(productId, variants, (varErr) => {
-        if (varErr) {
-          res.status(500).json({ error: varErr.message });
-          return;
+    db.run(
+      `INSERT INTO products (
+        name,
+        price,
+        category_id,
+        description,
+        image_url,
+        brand,
+        unit,
+        unit_type,
+        stock_qty,
+        is_active,
+        is_custom_order,
+        custom_note_placeholder,
+        created_at,
+        updated_at,
+        code,
+        related_ids
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'), ?, ?)`,
+      [
+        name,
+        firstVariant.price,
+        category_id,
+        description,
+        image_url,
+        brand,
+        firstVariant.label,
+        "variant",
+        totalStock,
+        is_active,
+        is_custom_order,
+        custom_note_placeholder,
+        code,
+        related_ids,
+      ],
+      function (err) {
+        if (err) {
+          db.run("ROLLBACK");
+          return res.status(500).json({ error: err.message });
         }
 
-        res.json({ ok: true, id: productId });
-      });
-    }
-  );
+        const productId = this.lastID;
+
+        replaceVariants(productId, variants, (varErr) => {
+          if (varErr) {
+            db.run("ROLLBACK");
+            return res.status(500).json({ error: varErr.message });
+          }
+
+          db.run("COMMIT", (commitErr) => {
+            if (commitErr) {
+              db.run("ROLLBACK");
+              return res.status(500).json({ error: commitErr.message });
+            }
+
+            res.json({ ok: true, id: productId });
+          });
+        });
+      }
+    );
+  });
 });
 
 /* =========================
@@ -451,8 +460,7 @@ router.patch("/:id", auth, (req, res) => {
   const id = Number(req.params.id);
 
   if (!Number.isInteger(id)) {
-    res.status(400).json({ error: "invalid id" });
-    return;
+    return res.status(400).json({ error: "invalid id" });
   }
 
   const b = req.body || {};
@@ -466,12 +474,9 @@ router.patch("/:id", auth, (req, res) => {
 
   if (b.title !== undefined || b.name !== undefined) {
     const value = String(b.title ?? b.name).trim();
-
     if (!value) {
-      res.status(400).json({ error: "title/name cannot be empty" });
-      return;
+      return res.status(400).json({ error: "title/name cannot be empty" });
     }
-
     setField("name = ?", value);
   }
 
@@ -532,8 +537,7 @@ router.patch("/:id", auth, (req, res) => {
     : [];
 
   if (variantsProvided && !variants.length) {
-    res.status(400).json({ error: "variants required" });
-    return;
+    return res.status(400).json({ error: "variants required" });
   }
 
   if (variantsProvided) {
@@ -551,29 +555,45 @@ router.patch("/:id", auth, (req, res) => {
   const sql = `UPDATE products SET ${fields.join(", ")} WHERE id = ?`;
   const sqlValues = [...values, id];
 
-  db.run(sql, sqlValues, function (err) {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
-    }
+  db.serialize(() => {
+    db.run("BEGIN TRANSACTION");
 
-    if (!this.changes) {
-      res.status(404).json({ error: "not found" });
-      return;
-    }
-
-    if (!variantsProvided) {
-      res.json({ ok: true });
-      return;
-    }
-
-    replaceVariants(id, variants, (varErr) => {
-      if (varErr) {
-        res.status(500).json({ error: varErr.message });
-        return;
+    db.run(sql, sqlValues, function (err) {
+      if (err) {
+        db.run("ROLLBACK");
+        return res.status(500).json({ error: err.message });
       }
 
-      res.json({ ok: true });
+      if (!this.changes) {
+        db.run("ROLLBACK");
+        return res.status(404).json({ error: "not found" });
+      }
+
+      if (!variantsProvided) {
+        return db.run("COMMIT", (commitErr) => {
+          if (commitErr) {
+            db.run("ROLLBACK");
+            return res.status(500).json({ error: commitErr.message });
+          }
+          res.json({ ok: true });
+        });
+      }
+
+      replaceVariants(id, variants, (varErr) => {
+        if (varErr) {
+          db.run("ROLLBACK");
+          return res.status(500).json({ error: varErr.message });
+        }
+
+        db.run("COMMIT", (commitErr) => {
+          if (commitErr) {
+            db.run("ROLLBACK");
+            return res.status(500).json({ error: commitErr.message });
+          }
+
+          res.json({ ok: true });
+        });
+      });
     });
   });
 });

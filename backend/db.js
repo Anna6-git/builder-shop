@@ -4,7 +4,11 @@ const path = require("path");
 const fs = require("fs");
 const sqlite3 = require("sqlite3").verbose();
 
-const DB_PATH = process.env.DB_PATH || "/data/database.sqlite";
+const DB_PATH = process.env.DB_PATH
+  ? process.env.DB_PATH
+  : process.env.RAILWAY_VOLUME_MOUNT_PATH
+    ? path.join(process.env.RAILWAY_VOLUME_MOUNT_PATH, "database.sqlite")
+    : path.join(__dirname, "database.sqlite");
 
 const dbDir = path.dirname(DB_PATH);
 if (!fs.existsSync(dbDir)) {
