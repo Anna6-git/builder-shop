@@ -6,11 +6,14 @@ const router = express.Router();
 const db = require("../db");
 const auth = require("../middleware/auth");
 
+/* =========================
+   HELPERS
+========================= */
 function parseRelatedIds(value) {
   if (!value) return [];
 
   try {
-    const arr = JSON.parse(value);
+    const arr = typeof value === "string" ? JSON.parse(value) : value;
     return Array.isArray(arr)
       ? arr.map(Number).filter(Number.isFinite)
       : [];
@@ -19,22 +22,35 @@ function parseRelatedIds(value) {
   }
 }
 
-function normalizeVariants(raw) {
-  if (!Array.isArray(raw)) return [];
+function normalizeVariants(raw, fallback = {}) {
+  let source = raw;
 
-  return raw
+  if (typeof source === "string") {
+    try {
+      source = JSON.parse(source);
+    } catch {
+      source = [];
+    }
+  }
+
+  if (!Array.isArray(source)) {
+    source = [];
+  }
+
+  const normalized = source
     .map((item, index) => {
       const label = String(item?.label || "").trim();
       const price = Number(item?.price);
       const stockQty = Number(item?.stockQty ?? item?.stock_qty ?? 0);
+      const sortOrder = Number.isFinite(Number(item?.sortOrder))
+        ? Number(item.sortOrder)
+        : index;
 
       return {
         label,
         price,
         stockQty,
-        sortOrder: Number.isFinite(Number(item?.sortOrder))
-          ? Number(item.sortOrder)
-          : index,
+        sortOrder,
       };
     })
     .filter(
@@ -45,11 +61,69 @@ function normalizeVariants(raw) {
         Number.isFinite(v.stockQty) &&
         v.stockQty >= 0
     );
+
+  if (normalized.length) {
+    return normalized;
+  }
+
+  const fallbackLabel = String(fallback?.unit || fallback?.label || "").trim();
+  const fallbackPrice = Number(fallback?.price);
+  const fallbackStockQty = Number(fallback?.stockQty ?? fallback?.stock_qty ?? 0);
+
+  if (
+    fallbackLabel &&
+    Number.isFinite(fallbackPrice) &&
+    fallbackPrice >= 0 &&
+    Number.isFinite(fallbackStockQty) &&
+    fallbackStockQty >= 0
+  ) {
+    return [
+      {
+        label: fallbackLabel,
+        price: fallbackPrice,
+        stockQty: fallbackStockQty,
+        sortOrder: 0,
+      },
+    ];
+  }
+
+  return [];
+}
+
+function buildFallbackVariantFromRow(row) {
+  const label = String(row?.unit || "").trim();
+  const price = Number(row?.price);
+  const stockQty = Number(row?.stock_qty ?? 0);
+
+  if (
+    label &&
+    Number.isFinite(price) &&
+    price >= 0 &&
+    Number.isFinite(stockQty) &&
+    stockQty >= 0
+  ) {
+    return [
+      {
+        id: 0,
+        label,
+        price,
+        stockQty,
+        sortOrder: 0,
+      },
+    ];
+  }
+
+  return [];
 }
 
 function mapProduct(row, variants = []) {
+  const safeVariants =
+    Array.isArray(variants) && variants.length
+      ? variants
+      : buildFallbackVariantFromRow(row);
+
   return {
-    id: row.id,
+    id: Number(row.id),
     title: row.name ?? "",
     price: Number(row.price ?? 0),
     catId: row.category_id ?? null,
@@ -66,7 +140,7 @@ function mapProduct(row, variants = []) {
     updatedAt: row.updated_at ?? null,
     code: row.code ?? "",
     relatedIds: parseRelatedIds(row.related_ids),
-    variants,
+    variants: safeVariants,
   };
 }
 
@@ -75,7 +149,10 @@ function loadVariantsByProductIds(productIds, cb) {
     ? productIds.map(Number).filter(Number.isFinite)
     : [];
 
-  if (!ids.length) return cb(null, new Map());
+  if (!ids.length) {
+    cb(null, new Map());
+    return;
+  }
 
   const placeholders = ids.map(() => "?").join(",");
 
@@ -86,13 +163,19 @@ function loadVariantsByProductIds(productIds, cb) {
      ORDER BY product_id ASC, sort_order ASC, id ASC`,
     ids,
     (err, rows) => {
-      if (err) return cb(err);
+      if (err) {
+        cb(err);
+        return;
+      }
 
       const map = new Map();
 
       for (const row of rows || []) {
         const pid = Number(row.product_id);
-        if (!map.has(pid)) map.set(pid, []);
+
+        if (!map.has(pid)) {
+          map.set(pid, []);
+        }
 
         map.get(pid).push({
           id: Number(row.id),
@@ -110,9 +193,15 @@ function loadVariantsByProductIds(productIds, cb) {
 
 function replaceVariants(productId, variants, cb) {
   db.run(`DELETE FROM product_variants WHERE product_id = ?`, [productId], (delErr) => {
-    if (delErr) return cb(delErr);
+    if (delErr) {
+      cb(delErr);
+      return;
+    }
 
-    if (!variants.length) return cb(null);
+    if (!variants.length) {
+      cb(null);
+      return;
+    }
 
     let left = variants.length;
     let failed = false;
@@ -133,17 +222,23 @@ function replaceVariants(productId, variants, cb) {
 
           if (insErr) {
             failed = true;
-            return cb(insErr);
+            cb(insErr);
+            return;
           }
 
           left -= 1;
-          if (left === 0) cb(null);
+          if (left === 0) {
+            cb(null);
+          }
         }
       );
     });
   });
 }
 
+/* =========================
+   GET ALL
+========================= */
 router.get("/", (_req, res) => {
   db.all(
     `SELECT
@@ -169,12 +264,18 @@ router.get("/", (_req, res) => {
      ORDER BY id DESC`,
     [],
     (err, rows) => {
-      if (err) return res.status(500).json({ error: err.message });
+      if (err) {
+        res.status(500).json({ error: err.message });
+        return;
+      }
 
       const ids = (rows || []).map((r) => Number(r.id));
 
       loadVariantsByProductIds(ids, (varErr, variantsMap) => {
-        if (varErr) return res.status(500).json({ error: varErr.message });
+        if (varErr) {
+          res.status(500).json({ error: varErr.message });
+          return;
+        }
 
         res.json(
           (rows || []).map((row) =>
@@ -186,11 +287,15 @@ router.get("/", (_req, res) => {
   );
 });
 
+/* =========================
+   GET ONE
+========================= */
 router.get("/:id", (req, res) => {
   const id = Number(req.params.id);
 
   if (!Number.isInteger(id)) {
-    return res.status(400).json({ error: "invalid id" });
+    res.status(400).json({ error: "invalid id" });
+    return;
   }
 
   db.get(
@@ -217,11 +322,21 @@ router.get("/:id", (req, res) => {
      LIMIT 1`,
     [id],
     (err, row) => {
-      if (err) return res.status(500).json({ error: err.message });
-      if (!row) return res.status(404).json({ error: "not found" });
+      if (err) {
+        res.status(500).json({ error: err.message });
+        return;
+      }
+
+      if (!row) {
+        res.status(404).json({ error: "not found" });
+        return;
+      }
 
       loadVariantsByProductIds([id], (varErr, variantsMap) => {
-        if (varErr) return res.status(500).json({ error: varErr.message });
+        if (varErr) {
+          res.status(500).json({ error: varErr.message });
+          return;
+        }
 
         res.json(mapProduct(row, variantsMap.get(id) || []));
       });
@@ -229,16 +344,21 @@ router.get("/:id", (req, res) => {
   );
 });
 
+/* =========================
+   CREATE
+========================= */
 router.post("/", auth, (req, res) => {
   const b = req.body || {};
 
   const name = String(b.title || b.name || "").trim();
-  const category_id = b.catId ?? b.category_id ?? null;
+  const category_id = Number.isFinite(Number(b.catId ?? b.category_id))
+    ? Number(b.catId ?? b.category_id)
+    : null;
   const description = String(b.description || "").trim();
   const image_url = String(b.img || b.image_url || "").trim();
   const brand = String(b.brand || "").trim();
-  const is_active = b.isActive === 0 || b.is_active === 0 ? 0 : 1;
-  const is_custom_order = b.isCustomOrder === 1 || b.is_custom_order === 1 ? 1 : 0;
+  const is_active = Number(b.isActive ?? b.is_active) === 0 ? 0 : 1;
+  const is_custom_order = Number(b.isCustomOrder ?? b.is_custom_order) === 1 ? 1 : 0;
   const custom_note_placeholder = String(
     b.customNotePlaceholder || b.custom_note_placeholder || ""
   ).trim();
@@ -250,14 +370,20 @@ router.post("/", auth, (req, res) => {
       : []
   );
 
-  const variants = normalizeVariants(b.variants);
+  const variants = normalizeVariants(b.variants, {
+    unit: b.unit,
+    price: b.price,
+    stockQty: b.stockQty ?? b.stock_qty,
+  });
 
   if (!name) {
-    return res.status(400).json({ error: "title/name required" });
+    res.status(400).json({ error: "title/name required" });
+    return;
   }
 
   if (!variants.length) {
-    return res.status(400).json({ error: "variants required" });
+    res.status(400).json({ error: "variants required" });
+    return;
   }
 
   const firstVariant = variants[0];
@@ -299,44 +425,59 @@ router.post("/", auth, (req, res) => {
       related_ids,
     ],
     function (err) {
-      if (err) return res.status(500).json({ error: err.message });
+      if (err) {
+        res.status(500).json({ error: err.message });
+        return;
+      }
 
       const productId = this.lastID;
 
       replaceVariants(productId, variants, (varErr) => {
-        if (varErr) return res.status(500).json({ error: varErr.message });
-        return res.json({ ok: true, id: productId });
+        if (varErr) {
+          res.status(500).json({ error: varErr.message });
+          return;
+        }
+
+        res.json({ ok: true, id: productId });
       });
     }
   );
 });
 
+/* =========================
+   UPDATE
+========================= */
 router.patch("/:id", auth, (req, res) => {
   const id = Number(req.params.id);
 
   if (!Number.isInteger(id)) {
-    return res.status(400).json({ error: "invalid id" });
+    res.status(400).json({ error: "invalid id" });
+    return;
   }
 
   const b = req.body || {};
   const fields = [];
   const values = [];
 
-  const setField = (sql, value) => {
+  function setField(sql, value) {
     fields.push(sql);
     values.push(value);
-  };
+  }
 
   if (b.title !== undefined || b.name !== undefined) {
     const value = String(b.title ?? b.name).trim();
+
     if (!value) {
-      return res.status(400).json({ error: "title/name cannot be empty" });
+      res.status(400).json({ error: "title/name cannot be empty" });
+      return;
     }
+
     setField("name = ?", value);
   }
 
   if (b.catId !== undefined || b.category_id !== undefined) {
-    setField("category_id = ?", b.catId ?? b.category_id);
+    const categoryId = Number(b.catId ?? b.category_id);
+    setField("category_id = ?", Number.isFinite(categoryId) ? categoryId : null);
   }
 
   if (b.description !== undefined) {
@@ -382,10 +523,17 @@ router.patch("/:id", auth, (req, res) => {
   }
 
   const variantsProvided = b.variants !== undefined;
-  const variants = variantsProvided ? normalizeVariants(b.variants) : [];
+  const variants = variantsProvided
+    ? normalizeVariants(b.variants, {
+        unit: b.unit,
+        price: b.price,
+        stockQty: b.stockQty ?? b.stock_qty,
+      })
+    : [];
 
   if (variantsProvided && !variants.length) {
-    return res.status(400).json({ error: "variants required" });
+    res.status(400).json({ error: "variants required" });
+    return;
   }
 
   if (variantsProvided) {
@@ -400,47 +548,66 @@ router.patch("/:id", auth, (req, res) => {
 
   fields.push("updated_at = datetime('now')");
 
-  const sqlValues = [];
-  fields.forEach((field, idx) => {
-    if (!field.includes("datetime('now')")) {
-      sqlValues.push(values[idx]);
-    }
-  });
-
   const sql = `UPDATE products SET ${fields.join(", ")} WHERE id = ?`;
-  sqlValues.push(id);
+  const sqlValues = [...values, id];
 
   db.run(sql, sqlValues, function (err) {
-    if (err) return res.status(500).json({ error: err.message });
-    if (!this.changes) return res.status(404).json({ error: "not found" });
+    if (err) {
+      res.status(500).json({ error: err.message });
+      return;
+    }
+
+    if (!this.changes) {
+      res.status(404).json({ error: "not found" });
+      return;
+    }
 
     if (!variantsProvided) {
-      return res.json({ ok: true });
+      res.json({ ok: true });
+      return;
     }
 
     replaceVariants(id, variants, (varErr) => {
-      if (varErr) return res.status(500).json({ error: varErr.message });
-      return res.json({ ok: true });
+      if (varErr) {
+        res.status(500).json({ error: varErr.message });
+        return;
+      }
+
+      res.json({ ok: true });
     });
   });
 });
 
+/* =========================
+   DELETE
+========================= */
 router.delete("/:id", auth, (req, res) => {
   const id = Number(req.params.id);
 
   if (!Number.isInteger(id)) {
-    return res.status(400).json({ error: "invalid id" });
+    res.status(400).json({ error: "invalid id" });
+    return;
   }
 
   db.serialize(() => {
     db.run(`DELETE FROM product_variants WHERE product_id = ?`, [id], (varErr) => {
-      if (varErr) return res.status(500).json({ error: varErr.message });
+      if (varErr) {
+        res.status(500).json({ error: varErr.message });
+        return;
+      }
 
       db.run(`DELETE FROM products WHERE id = ?`, [id], function (err) {
-        if (err) return res.status(500).json({ error: err.message });
-        if (!this.changes) return res.status(404).json({ error: "not found" });
+        if (err) {
+          res.status(500).json({ error: err.message });
+          return;
+        }
 
-        return res.json({ ok: true });
+        if (!this.changes) {
+          res.status(404).json({ error: "not found" });
+          return;
+        }
+
+        res.json({ ok: true });
       });
     });
   });

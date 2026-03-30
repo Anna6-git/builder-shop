@@ -1,3 +1,5 @@
+"use strict";
+
 const API_BASE = window.API_BASE || "http://localhost:3001";
 
 /* ===================== AUTH + API ===================== */
@@ -6,8 +8,8 @@ function getToken() {
 }
 
 function authHeaders() {
-  const t = getToken();
-  return t ? { Authorization: `Bearer ${t}` } : {};
+  const token = getToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
 async function api(path, options = {}) {
@@ -21,7 +23,9 @@ async function api(path, options = {}) {
 
   const ct = res.headers.get("content-type") || "";
   const isJson = ct.includes("application/json");
-  const data = isJson ? await res.json().catch(() => null) : await res.text().catch(() => null);
+  const data = isJson
+    ? await res.json().catch(() => null)
+    : await res.text().catch(() => null);
 
   if (!res.ok) {
     const msg =
@@ -30,10 +34,10 @@ async function api(path, options = {}) {
       `HTTP ${res.status}`;
 
     if (res.status === 401) {
-  token = "";
-  localStorage.removeItem("admin_token");
-  localStorage.removeItem("current_user");
-}
+      localStorage.removeItem("admin_token");
+      localStorage.removeItem("current_user");
+      if (typeof showLogin === "function") showLogin();
+    }
 
     throw new Error(msg);
   }
@@ -41,12 +45,24 @@ async function api(path, options = {}) {
   return data;
 }
 
+/* ===================== HELPERS ===================== */
+function escapeAttr(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
 
+function parseLooseNumber(value) {
+  const raw = String(value ?? "").trim().replace(",", ".");
+  if (!raw) return NaN;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : NaN;
+}
 
 /* ===================== UI ===================== */
-let token = localStorage.getItem("admin_token") || "";
-
-// UI
+// auth
 const loginBox = document.getElementById("loginBox");
 const panelBox = document.getElementById("panelBox");
 const adminName = document.getElementById("adminName");
@@ -55,18 +71,19 @@ const loginBtn = document.getElementById("loginBtn");
 const logoutBtn = document.getElementById("logoutBtn");
 const toggleAdminPass = document.getElementById("toggleAdminPass");
 
+// tabs
 const tabCats = document.getElementById("tabCats");
 const tabProds = document.getElementById("tabProds");
 const catsBox = document.getElementById("catsBox");
 const prodsBox = document.getElementById("prodsBox");
 
-// cats
+// categories
 const catName = document.getElementById("catName");
 const catIcon = document.getElementById("catIcon");
 const addCatBtn = document.getElementById("addCatBtn");
 const catsList = document.getElementById("catsList");
 
-// prods
+// products
 const pTitle = document.getElementById("pTitle");
 const pCat = document.getElementById("pCat");
 const pCatList = document.getElementById("pCatList");
@@ -82,11 +99,11 @@ const prodsList = document.getElementById("prodsList");
 const variantRows = document.getElementById("variantRows");
 const addVariantRowBtn = document.getElementById("addVariantRowBtn");
 
-
-// state
+/* ===================== STATE ===================== */
 let CATEGORIES = [];
 let PRODUCTS = [];
 
+/* ===================== VARIANTS FORM ===================== */
 function createVariantRow(label = "", price = "", stockQty = "") {
   const row = document.createElement("div");
   row.className = "variantRow";
@@ -96,19 +113,19 @@ function createVariantRow(label = "", price = "", stockQty = "") {
   row.style.marginBottom = "8px";
 
   row.innerHTML = `
-    <input class="searchInput" data-field="label" placeholder="Фасування (напр. 0.9кг)" value="${label}">
-    <input class="searchInput" data-field="price" placeholder="Ціна" type="number" step="0.01" value="${price}">
-    <input class="searchInput" data-field="stockQty" placeholder="Кількість" type="number" step="0.1" value="${stockQty}">
+    <input class="searchInput" data-field="label" placeholder="Фасування (напр. 0.9кг)" value="${escapeAttr(label)}">
+    <input class="searchInput" data-field="price" placeholder="Ціна" type="number" step="0.01" min="0" value="${escapeAttr(price)}">
+    <input class="searchInput" data-field="stockQty" placeholder="Кількість" type="number" step="0.1" min="0" value="${escapeAttr(stockQty)}">
     <button class="btnDanger" type="button" data-act="removeVariant">×</button>
   `;
 
   row.addEventListener("click", (e) => {
-    if (e.target?.dataset?.act === "removeVariant") {
-      row.remove();
+    if (e.target?.dataset?.act !== "removeVariant") return;
 
-      if (!variantRows.children.length) {
-        variantRows.appendChild(createVariantRow());
-      }
+    row.remove();
+
+    if (!variantRows.children.length) {
+      variantRows.appendChild(createVariantRow());
     }
   });
 
@@ -119,68 +136,84 @@ function collectVariantsFromForm() {
   const rows = Array.from(variantRows.querySelectorAll(".variantRow"));
 
   return rows
-    .map((row) => {
-      const label = row.querySelector('[data-field="label"]')?.value?.trim() || "";
-      const price = Number(row.querySelector('[data-field="price"]')?.value);
-      const stockQty = Number(row.querySelector('[data-field="stockQty"]')?.value || 0);
+    .map((row, index) => {
+      const labelRaw = row.querySelector('[data-field="label"]')?.value ?? "";
+      const priceRaw = row.querySelector('[data-field="price"]')?.value ?? "";
+      const stockRaw = row.querySelector('[data-field="stockQty"]')?.value ?? "";
 
-      return { label, price, stockQty };
+      const label = String(labelRaw).trim();
+      const price = parseLooseNumber(priceRaw);
+      const stockQty = parseLooseNumber(stockRaw);
+
+      const isEmpty = !label && !String(priceRaw).trim() && !String(stockRaw).trim();
+      if (isEmpty) return null;
+
+      return {
+        label,
+        price,
+        stockQty,
+        sortOrder: index,
+      };
     })
-    .filter((v) => v.label || Number.isFinite(v.price) || Number.isFinite(v.stockQty));
+    .filter(Boolean);
 }
 
 function resetVariantsForm() {
+  if (!variantRows) return;
   variantRows.innerHTML = "";
   variantRows.appendChild(createVariantRow());
 }
 
+/* ===================== UI STATE ===================== */
 function showPanel() {
-  loginBox.hidden = true;
-  panelBox.hidden = false;
+  if (loginBox) loginBox.hidden = true;
+  if (panelBox) panelBox.hidden = false;
   setTab("cats");
   refreshAll();
 }
 
 function showLogin() {
-  loginBox.hidden = false;
-  panelBox.hidden = true;
+  if (loginBox) loginBox.hidden = false;
+  if (panelBox) panelBox.hidden = true;
 }
 
 function setTab(tab) {
   const isCats = tab === "cats";
-  tabCats.classList.toggle("tabActive", isCats);
-  tabProds.classList.toggle("tabActive", !isCats);
-  catsBox.hidden = !isCats;
-  prodsBox.hidden = isCats;
+
+  tabCats?.classList.toggle("tabActive", isCats);
+  tabProds?.classList.toggle("tabActive", !isCats);
+
+  if (catsBox) catsBox.hidden = !isCats;
+  if (prodsBox) prodsBox.hidden = isCats;
 }
 
 tabCats?.addEventListener("click", () => setTab("cats"));
 tabProds?.addEventListener("click", () => setTab("prods"));
 
 addVariantRowBtn?.addEventListener("click", () => {
-  variantRows.appendChild(createVariantRow());
+  variantRows?.appendChild(createVariantRow());
 });
 
 logoutBtn?.addEventListener("click", () => {
-  token = "";
   localStorage.removeItem("admin_token");
   localStorage.removeItem("current_user");
   showLogin();
 });
 
 toggleAdminPass?.addEventListener("click", () => {
+  if (!adminPass) return;
   adminPass.type = adminPass.type === "password" ? "text" : "password";
 });
 
 /* ===================== LOGIN ===================== */
 loginBtn?.addEventListener("click", async () => {
-  const email = adminName.value.trim();
-  const password = adminPass.value;
-  console.log("LOGIN CLICK ✅");
+  const email = adminName?.value.trim() || "";
+  const password = adminPass?.value || "";
 
-  if (!email || !password) return alert("Введіть Email і пароль");
-
-  console.log("sending login...", { email, passLen: password.length });
+  if (!email || !password) {
+    alert("Введіть Email і пароль");
+    return;
+  }
 
   try {
     const data = await api("/auth/login", {
@@ -189,13 +222,16 @@ loginBtn?.addEventListener("click", async () => {
       body: JSON.stringify({ email, password }),
     });
 
-    if (!data?.token) throw new Error("Токен не отримано");
-    if (data?.user) {
-  localStorage.setItem("current_user", JSON.stringify(data.user));
-}
+    if (!data?.token) {
+      throw new Error("Токен не отримано");
+    }
 
-    token = data.token;
-    localStorage.setItem("admin_token", token);
+    localStorage.setItem("admin_token", data.token);
+
+    if (data?.user) {
+      localStorage.setItem("current_user", JSON.stringify(data.user));
+    }
+
     showPanel();
   } catch (e) {
     alert("Помилка входу: " + e.message);
@@ -205,8 +241,16 @@ loginBtn?.addEventListener("click", async () => {
 /* ===================== LOAD DATA ===================== */
 async function refreshAll() {
   try {
-    CATEGORIES = await api("/categories", { method: "GET" });
-    PRODUCTS = await api("/products", { method: "GET" });
+    const [cats, prods] = await Promise.all([
+      api("/categories", { method: "GET" }),
+      api("/products", { method: "GET" }),
+    ]);
+
+    CATEGORIES = Array.isArray(cats) ? cats : [];
+    PRODUCTS = Array.isArray(prods) ? prods : [];
+
+    localStorage.setItem("categories_db", JSON.stringify(CATEGORIES));
+    localStorage.setItem("products_db", JSON.stringify(PRODUCTS));
 
     renderCats();
     renderCatSelect();
@@ -218,10 +262,13 @@ async function refreshAll() {
 
 /* ===================== CATEGORIES ===================== */
 addCatBtn?.addEventListener("click", async () => {
-  const name = catName.value.trim();
-  const icon = catIcon.value.trim();
+  const name = catName?.value.trim() || "";
+  const icon = catIcon?.value.trim() || "";
 
-  if (!name) return alert("Введіть назву категорії");
+  if (!name) {
+    alert("Введіть назву категорії");
+    return;
+  }
 
   try {
     await api("/categories", {
@@ -230,8 +277,9 @@ addCatBtn?.addEventListener("click", async () => {
       body: JSON.stringify({ name, icon: icon || null }),
     });
 
-    catName.value = "";
-    catIcon.value = "";
+    if (catName) catName.value = "";
+    if (catIcon) catIcon.value = "";
+
     await refreshAll();
   } catch (e) {
     alert("Не вдалося додати категорію: " + e.message);
@@ -239,15 +287,15 @@ addCatBtn?.addEventListener("click", async () => {
 });
 
 function renderCats() {
-  const cats = Array.isArray(CATEGORIES) ? CATEGORIES : [];
+  if (!catsList) return;
   catsList.innerHTML = "";
 
-  if (!cats.length) {
+  if (!CATEGORIES.length) {
     catsList.innerHTML = `<div class="hint">Категорій ще немає.</div>`;
     return;
   }
 
-  cats.forEach((c) => {
+  CATEGORIES.forEach((c) => {
     const row = document.createElement("div");
     row.className = "adminRow";
     row.innerHTML = `
@@ -257,9 +305,9 @@ function renderCats() {
       <div>
         <div style="font-weight:900">${c.name}</div>
       </div>
-      <input type="text" value="${c.icon || ""}" data-field="icon" placeholder="іконка" />
-      <button class="btn" data-act="save">Зберегти</button>
-      <button class="btnDanger" data-act="del">Видалити</button>
+      <input type="text" value="${escapeAttr(c.icon || "")}" data-field="icon" placeholder="іконка" />
+      <button class="btn" data-act="save" type="button">Зберегти</button>
+      <button class="btnDanger" data-act="del" type="button">Видалити</button>
     `;
 
     row.addEventListener("click", async (e) => {
@@ -270,20 +318,24 @@ function renderCats() {
         if (act === "del") {
           const ok = confirm("Видалити категорію?");
           if (!ok) return;
+
           await api(`/categories/${c.id}`, { method: "DELETE" });
           await refreshAll();
+          return;
         }
 
         if (act === "save") {
-          const iconInput = row.querySelector('input[data-field="icon"]');
+          const iconInput = row.querySelector('[data-field="icon"]');
+
           await api(`/categories/${c.id}`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               name: c.name,
-              icon: (iconInput.value || "").trim() || null,
+              icon: String(iconInput?.value || "").trim() || null,
             }),
           });
+
           await refreshAll();
         }
       } catch (err) {
@@ -296,12 +348,10 @@ function renderCats() {
 }
 
 function renderCatSelect() {
-  const cats = Array.isArray(CATEGORIES) ? CATEGORIES : [];
   if (!pCatList) return;
-
   pCatList.innerHTML = "";
 
-  cats.forEach((c) => {
+  CATEGORIES.forEach((c) => {
     const opt = document.createElement("option");
     opt.value = c.name;
     pCatList.appendChild(opt);
@@ -310,54 +360,63 @@ function renderCatSelect() {
 
 /* ===================== PRODUCTS ===================== */
 addProductBtn?.addEventListener("click", async () => {
-  const title = pTitle.value.trim();
-const catName = (pCat.value || "").trim();
-const matchedCat = CATEGORIES.find(
-  (c) => String(c.name || "").trim().toLowerCase() === catName.toLowerCase()
-);
-const catId = matchedCat ? Number(matchedCat.id) : null;
-  const brand = pBrand.value.trim();
-  let img = (pImg.value || "").trim();
-  const description = (pDescription.value || "").trim();
-  const isCustomOrder = Number(pIsCustomOrder.value || 0);
+  const title = pTitle?.value.trim() || "";
+  const catText = String(pCat?.value || "").trim();
+  const matchedCat = CATEGORIES.find(
+    (c) => String(c.name || "").trim().toLowerCase() === catText.toLowerCase()
+  );
+  const catId = matchedCat ? Number(matchedCat.id) : null;
+
+  const brand = pBrand?.value.trim() || "";
+  let img = String(pImg?.value || "").trim();
+  const description = String(pDescription?.value || "").trim();
+  const isCustomOrder = Number(pIsCustomOrder?.value || 0);
   const variants = collectVariantsFromForm();
 
-  const relatedIds = (pRelatedIds.value || "")
+  const relatedIds = String(pRelatedIds?.value || "")
     .split(",")
     .map((x) => Number(x.trim()))
     .filter(Number.isFinite);
 
   if (!title) {
-    return alert("Введіть назву товару");
+    alert("Введіть назву товару");
+    return;
   }
+
   if (!catId) {
-  return alert("Оберіть категорію зі списку");
-}
+    alert("Оберіть категорію зі списку");
+    return;
+  }
 
   if (!brand) {
-    return alert("Введіть виробника");
+    alert("Введіть виробника");
+    return;
   }
 
   if (!variants.length) {
-    return alert("Додай хоча б одне фасування");
+    alert("Додай хоча б одне фасування");
+    return;
   }
 
   for (const v of variants) {
     if (!v.label) {
-      return alert("У кожного фасування має бути назва, наприклад 0.9кг");
+      alert("У кожного фасування має бути назва, наприклад 0.9кг");
+      return;
     }
 
     if (!Number.isFinite(v.price) || v.price <= 0) {
-      return alert(`Для фасування "${v.label || "—"}" ціна має бути більше 0`);
+      alert(`Для фасування "${v.label}" ціна має бути більше 0`);
+      return;
     }
 
     if (!Number.isFinite(v.stockQty) || v.stockQty < 0) {
-      return alert(`Для фасування "${v.label || "—"}" кількість має бути числом ≥ 0`);
+      alert(`Для фасування "${v.label}" кількість має бути числом ≥ 0`);
+      return;
     }
   }
 
   try {
-    if (pFile && pFile.files && pFile.files[0]) {
+    if (pFile?.files?.[0]) {
       const fd = new FormData();
       fd.append("image", pFile.files[0]);
 
@@ -366,7 +425,7 @@ const catId = matchedCat ? Number(matchedCat.id) : null;
         body: fd,
       });
 
-      img = uploaded.url || "";
+      img = uploaded?.url || "";
     }
 
     await api("/products", {
@@ -385,15 +444,16 @@ const catId = matchedCat ? Number(matchedCat.id) : null;
       }),
     });
 
-    pTitle.value = "";
-    pBrand.value = "";
-    pImg.value = "";
+    if (pTitle) pTitle.value = "";
+    if (pCat) pCat.value = "";
+    if (pBrand) pBrand.value = "";
+    if (pImg) pImg.value = "";
     if (pFile) pFile.value = "";
-    pDescription.value = "";
-    pIsCustomOrder.value = "0";
-    pRelatedIds.value = "";
-    resetVariantsForm();
+    if (pDescription) pDescription.value = "";
+    if (pIsCustomOrder) pIsCustomOrder.value = "0";
+    if (pRelatedIds) pRelatedIds.value = "";
 
+    resetVariantsForm();
     await refreshAll();
   } catch (e) {
     alert("Не вдалося додати товар: " + e.message);
@@ -401,37 +461,46 @@ const catId = matchedCat ? Number(matchedCat.id) : null;
 });
 
 function renderProds() {
-  const catsMap = new Map((Array.isArray(CATEGORIES) ? CATEGORIES : []).map((c) => [c.id, c]));
+  if (!prodsList) return;
+
+  const catsMap = new Map(CATEGORIES.map((c) => [Number(c.id), c]));
   prodsList.innerHTML = "";
 
-  if (!Array.isArray(PRODUCTS) || !PRODUCTS.length) {
+  if (!PRODUCTS.length) {
     prodsList.innerHTML = `<div class="hint">Товарів ще немає.</div>`;
     return;
   }
 
   PRODUCTS.forEach((p) => {
-    const cat = p.catId ? catsMap.get(p.catId) : null;
+    const cat = p.catId ? catsMap.get(Number(p.catId)) : null;
 
     const row = document.createElement("div");
     row.className = "adminRow";
+
+    const variantsText =
+      Array.isArray(p.variants) && p.variants.length
+        ? p.variants
+            .map(
+              (v) =>
+                `${v.label}: ${Number(v.price).toFixed(2)} ₴ • склад: ${Number(v.stockQty ?? 0)}`
+            )
+            .join("<br>")
+        : "Фасування не задані";
+
     row.innerHTML = `
-      <img src="${p.img || ""}" alt="" onerror="this.style.display='none'">
+      <img src="${escapeAttr(p.img || "")}" alt="" onerror="this.style.display='none'">
       <div>
-        <div style="font-weight:900">${p.title}</div>
+        <div style="font-weight:900">${p.title || ""}</div>
         <div style="font-size:12px;color:#6b7280">
           ${cat ? cat.name : "Без категорії"} • ${p.brand || ""}
         </div>
         <div style="font-size:12px;color:#374151; margin-top:4px;">
-          ${
-            Array.isArray(p.variants) && p.variants.length
-              ? p.variants.map(v => `${v.label}: ${Number(v.price).toFixed(2)} ₴ • склад: ${Number(v.stockQty ?? 0)}`).join("<br>")
-              : "Фасування не задані"
-          }
+          ${variantsText}
         </div>
       </div>
 
-      <button class="btn" data-act="editVariants">Редагувати</button>
-      <button class="btnDanger" data-act="del">Видалити</button>
+      <button class="btn" data-act="editVariants" type="button">Редагувати фасування</button>
+      <button class="btnDanger" data-act="del" type="button">Видалити</button>
     `;
 
     row.addEventListener("click", async (e) => {
@@ -442,49 +511,65 @@ function renderProds() {
         if (act === "del") {
           const ok = confirm("Видалити товар?");
           if (!ok) return;
+
           await api(`/products/${p.id}`, { method: "DELETE" });
           await refreshAll();
+          return;
         }
 
         if (act === "editVariants") {
+          const currentValue =
+            Array.isArray(p.variants) && p.variants.length
+              ? p.variants
+                  .map((v) => `${v.label}|${v.price}|${v.stockQty ?? 0}`)
+                  .join("\n")
+              : "";
+
           const variantsText = prompt(
             "Введи фасування у форматі:\n0.9кг|180|6\n2.8кг|490|3",
-            Array.isArray(p.variants)
-              ? p.variants.map(v => `${v.label}|${v.price}|${v.stockQty ?? 0}`).join("\n")
-              : ""
+            currentValue
           );
 
           if (variantsText === null) return;
 
-          const variants = variantsText
+          const variants = String(variantsText)
             .split("\n")
-            .map(line => line.trim())
+            .map((line) => line.trim())
             .filter(Boolean)
-            .map((line) => {
-              const [label, price, stockQty] = line.split("|").map(x => (x || "").trim());
+            .map((line, index) => {
+              const [labelRaw, priceRaw, stockRaw] = line.split("|");
               return {
-                label,
-                price: Number(price),
-                stockQty: Number(stockQty || 0),
+                label: String(labelRaw || "").trim(),
+                price: parseLooseNumber(priceRaw),
+                stockQty: parseLooseNumber(stockRaw),
+                sortOrder: index,
               };
             });
 
           if (!variants.length) {
-            return alert("Потрібно вказати хоча б одне фасування");
+            alert("Потрібно вказати хоча б одне фасування");
+            return;
           }
 
           for (const v of variants) {
-            if (!v.label) return alert("У кожного фасування має бути назва");
-            if (!Number.isFinite(v.price) || v.price <= 0) return alert(`Невірна ціна для ${v.label}`);
-            if (!Number.isFinite(v.stockQty) || v.stockQty < 0) return alert(`Невірний склад для ${v.label}`);
+            if (!v.label) {
+              alert("У кожного фасування має бути назва");
+              return;
+            }
+            if (!Number.isFinite(v.price) || v.price <= 0) {
+              alert(`Невірна ціна для ${v.label}`);
+              return;
+            }
+            if (!Number.isFinite(v.stockQty) || v.stockQty < 0) {
+              alert(`Невірна кількість для ${v.label}`);
+              return;
+            }
           }
 
           await api(`/products/${p.id}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              variants,
-            }),
+            body: JSON.stringify({ variants }),
           });
 
           await refreshAll();
@@ -500,19 +585,20 @@ function renderProds() {
 
 /* ===================== INIT ===================== */
 (async function init() {
-  if (token) {
-    try {
-      await api("/auth/me", { method: "GET" });
-      await refreshAll();
-      showPanel();
-      return;
-    } catch {
-      token = "";
-      localStorage.removeItem("admin_token");
-    }
-  }
-  showLogin();
   resetVariantsForm();
-})();
 
-;
+  const token = getToken();
+  if (!token) {
+    showLogin();
+    return;
+  }
+
+  try {
+    await api("/auth/me", { method: "GET" });
+    showPanel();
+  } catch {
+    localStorage.removeItem("admin_token");
+    localStorage.removeItem("current_user");
+    showLogin();
+  }
+})();

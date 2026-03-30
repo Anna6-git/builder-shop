@@ -31,6 +31,10 @@ function getCats() {
   return safeParse(localStorage.getItem(KEY_CATS), []);
 }
 
+function setCats(list) {
+  localStorage.setItem(KEY_CATS, JSON.stringify(Array.isArray(list) ? list : []));
+}
+
 function setCart(obj) {
   localStorage.setItem(KEY_CART, JSON.stringify(obj || {}));
 }
@@ -61,18 +65,10 @@ function formatQty(qty) {
   return String(Math.round(n * 10) / 10);
 }
 
-function round1(x) {
-  return Math.round(Number(x) * 10) / 10;
-}
-
 function clamp(n, min, max) {
   const x = Number(n);
   if (!Number.isFinite(x)) return min;
   return Math.max(min, Math.min(max, x));
-}
-
-function isInStock(p) {
-  return Number(p?.stockQty || 0) > 0;
 }
 
 function catById(cats, id) {
@@ -160,7 +156,6 @@ const cartCount = document.getElementById("cartCount");
 
 const productImg = document.getElementById("productImg");
 const productTitle = document.getElementById("productTitle");
-const productPageTitleTop = document.getElementById("productPageTitleTop");
 const productMeta = document.getElementById("productMeta");
 const productPrice = document.getElementById("productPrice");
 const productCode = document.getElementById("productCode");
@@ -276,10 +271,7 @@ function openRelatedPicker() {
   setTimeout(() => relatedPickerSearch?.focus(), 50);
 }
 
-addRelatedProductBtn?.addEventListener("click", () => {
-  openRelatedPicker();
-});
-
+addRelatedProductBtn?.addEventListener("click", openRelatedPicker);
 relatedPickerClose?.addEventListener("click", closeRelatedPicker);
 relatedPickerOverlay?.addEventListener("click", closeRelatedPicker);
 
@@ -314,18 +306,17 @@ function renderRelatedPickerResults(query) {
   }
 
   list.forEach((p) => {
-    const row = document.createElement("div");
-    row.className = "adminRow";
-
     const alreadyAdded =
       Array.isArray(CURRENT_PRODUCT.relatedIds) &&
       CURRENT_PRODUCT.relatedIds.includes(Number(p.id));
 
+    const row = document.createElement("div");
+    row.className = "adminRow";
     row.innerHTML = `
       <div>
         <div style="font-weight:900">${escapeHTML(p.title || "")}</div>
         <div style="font-size:12px;color:#6b7280">
-          ID: ${p.id}${p.brand ? ` • ${escapeHTML(p.brand)}` : ""}${Number.isFinite(Number(p.price)) ? ` • ${formatPrice(p.price)} ₴` : ""}
+          ID: ${p.id}${p.brand ? ` • ${escapeHTML(p.brand)}` : ""} • ${productCardPriceText(p)} ₴
         </div>
       </div>
       <button class="btnPrimary" type="button" data-add-id="${p.id}" ${alreadyAdded ? "disabled" : ""}>
@@ -421,7 +412,7 @@ function openProductAdminModal(product) {
   pDescInput.value = product?.description || "";
   pImgInput.value = product?.img || "";
   pFileInput.value = "";
-  productFormHint.textContent = "Фасування редагуються в адмін-панелі товарів.";
+  productFormHint.textContent = "Фасування редагуються в адмін-панелі.";
 
   pPriceInput.disabled = true;
   pUnitInput.disabled = true;
@@ -469,10 +460,6 @@ function closeProductAdminModal() {
   pPriceInput.disabled = false;
   pUnitInput.disabled = false;
   pStockInput.disabled = false;
-
-  if (deleteProductBtn) {
-    deleteProductBtn.hidden = false;
-  }
 }
 
 adminProductClose?.addEventListener("click", closeProductAdminModal);
@@ -485,6 +472,7 @@ pImgInput?.addEventListener("input", () => {
     pPreview.hidden = false;
   } else {
     pPreview.hidden = true;
+    pPreview.removeAttribute("src");
   }
 });
 
@@ -543,7 +531,12 @@ saveProductBtn?.addEventListener("click", async () => {
       return;
     }
 
-    productFormHint.textContent = editingProductId ? "Зберігаю..." : "Створюю...";
+    if (!Number.isFinite(payload.catId) || payload.catId <= 0) {
+      productFormHint.textContent = "Оберіть категорію.";
+      return;
+    }
+
+    productFormHint.textContent = "Зберігаю...";
 
     if (editingProductId) {
       await api(`/products/${editingProductId}`, {
@@ -557,9 +550,7 @@ saveProductBtn?.addEventListener("click", async () => {
 
     if (editingProductId) {
       const updated = getProds().find((x) => Number(x.id) === Number(editingProductId));
-      if (updated) {
-        renderProduct(updated);
-      }
+      if (updated) renderProduct(updated);
     }
 
     closeProductAdminModal();
@@ -596,43 +587,59 @@ function fillUnits(product) {
   if (variants.length) {
     variants.forEach((variant, index) => {
       const opt = document.createElement("option");
-      opt.value = String(variant.id ?? index);
-      opt.textContent = `${variant.label} — ${formatPrice(variant.price)} ₴`;
-      opt.dataset.variantId = String(variant.id ?? index);
+      const key = String(variant.id ?? `idx_${index}`);
+      opt.value = key;
+      opt.textContent = variant.label;
       pUnit.appendChild(opt);
     });
     return;
   }
 
   const opt = document.createElement("option");
-  opt.value = product?.unit || "шт";
+  opt.value = "base";
   opt.textContent = product?.unit || "шт";
   pUnit.appendChild(opt);
 }
 
-function getSelectedVariant(product) {
+function getSelectedVariantEntry(product) {
   const variants = Array.isArray(product?.variants) ? product.variants : [];
   if (!variants.length) return null;
 
   const selectedValue = String(pUnit?.value || "");
-  return (
-    variants.find((v, index) => String(v.id ?? index) === selectedValue) ||
-    variants[0]
+  const index = variants.findIndex(
+    (v, i) => String(v.id ?? `idx_${i}`) === selectedValue
   );
+
+  if (index === -1) {
+    return {
+      variant: variants[0],
+      index: 0,
+      key: String(variants[0].id ?? "idx_0"),
+    };
+  }
+
+  return {
+    variant: variants[index],
+    index,
+    key: String(variants[index].id ?? `idx_${index}`),
+  };
 }
 
 function updateProductPriceAndStock(product) {
   if (!product) return;
 
   const isCustom = Number(product.isCustomOrder || 0) === 1;
-  const variant = getSelectedVariant(product);
+  const selected = getSelectedVariantEntry(product);
+  const variant = selected?.variant || null;
 
   const activePrice = variant
     ? Number(variant.price || 0)
     : Number(product.price || 0);
+
   const activeLabel = variant
     ? String(variant.label || "")
     : String(product.unit || "шт");
+
   const activeStock = variant
     ? Number(variant.stockQty ?? 0)
     : Number(product.stockQty ?? 0);
@@ -666,16 +673,16 @@ function updateProductPriceAndStock(product) {
         : "Цього товару зараз немає в наявності.";
   }
 
-  if (!pQty) return;
+  if (pQty) {
+    pQty.step = "1";
+    pQty.min = "1";
+    pQty.value = "1";
 
-  pQty.step = "1";
-  pQty.min = "1";
-  pQty.value = "1";
-
-  if (!isCustom && activeStock > 0) {
-    pQty.max = String(activeStock);
-  } else {
-    pQty.removeAttribute("max");
+    if (!isCustom && activeStock > 0) {
+      pQty.max = String(activeStock);
+    } else {
+      pQty.removeAttribute("max");
+    }
   }
 }
 
@@ -686,6 +693,7 @@ pUnit?.addEventListener("change", () => {
 
 function renderProduct(product) {
   const isCustom = Number(product.isCustomOrder || 0) === 1;
+  CURRENT_PRODUCT = product;
 
   if (productCustomBadge) productCustomBadge.hidden = !isCustom;
   if (productCustomHint) productCustomHint.hidden = !isCustom;
@@ -693,11 +701,10 @@ function renderProduct(product) {
 
   if (productCustomNote) {
     productCustomNote.hidden = !isCustom;
+    productCustomNote.value = "";
     productCustomNote.placeholder =
       product.customNotePlaceholder || "Вкажіть уточнення до замовлення";
   }
-
-  CURRENT_PRODUCT = product;
 
   if (productEditBtn) productEditBtn.hidden = !isAdmin();
   if (productDeleteBtn) productDeleteBtn.hidden = !isAdmin();
@@ -709,7 +716,6 @@ function renderProduct(product) {
   }
 
   if (productTitle) productTitle.textContent = product.title || "Товар";
-  if (productPageTitleTop) productPageTitleTop.textContent = "Товар";
   document.title = `${product.title || "Товар"} — БудМаркет`;
 
   fillUnits(product);
@@ -811,6 +817,7 @@ function renderRelated(product) {
         const freshBeforeUpdate = getProds().find(
           (x) => Number(x.id) === currentProductId
         );
+
         const currentRelated = Array.isArray(freshBeforeUpdate?.relatedIds)
           ? freshBeforeUpdate.relatedIds.map(Number).filter(Number.isFinite)
           : [];
@@ -830,6 +837,7 @@ function renderRelated(product) {
         const freshCurrent = getProds().find(
           (x) => Number(x.id) === currentProductId
         );
+
         if (freshCurrent) {
           CURRENT_PRODUCT = freshCurrent;
           renderRelated(freshCurrent);
@@ -847,10 +855,12 @@ function renderRelated(product) {
    CART
 ========================= */
 function getSelectedVariantState() {
-  const variant = getSelectedVariant(CURRENT_PRODUCT);
+  const selected = getSelectedVariantEntry(CURRENT_PRODUCT);
+  const variant = selected?.variant || null;
+
   return {
     variant,
-    variantId: variant ? Number(variant.id ?? 0) : 0,
+    variantIdKey: selected?.key || "base",
     variantLabel: variant
       ? String(variant.label || CURRENT_PRODUCT.unit || "шт")
       : String(CURRENT_PRODUCT.unit || "шт"),
@@ -866,9 +876,8 @@ function getSelectedVariantState() {
 pMinus?.addEventListener("click", () => {
   if (!CURRENT_PRODUCT || !pQty) return;
 
-  const min = 1;
   let v = Number(pQty.value || 1);
-  v = clamp(v - 1, min, Number.MAX_SAFE_INTEGER);
+  v = clamp(v - 1, 1, Number.MAX_SAFE_INTEGER);
   pQty.value = String(v);
 });
 
@@ -896,13 +905,11 @@ addToCartBtn?.addEventListener("click", () => {
   const customNote = String(productCustomNote?.value || "").trim();
 
   if (!Number.isFinite(qty) || qty <= 0) {
-    if (productHint) {
-      productHint.textContent = "Вкажіть коректну кількість.";
-    }
+    if (productHint) productHint.textContent = "Вкажіть коректну кількість.";
     return;
   }
 
-  const { variantId, variantLabel, variantPrice, variantStock } =
+  const { variantIdKey, variantLabel, variantPrice, variantStock } =
     getSelectedVariantState();
 
   if (!isCustom && variantStock > 0 && qty > variantStock) {
@@ -916,7 +923,7 @@ addToCartBtn?.addEventListener("click", () => {
 
   const key = [
     CURRENT_PRODUCT.id,
-    variantId,
+    variantIdKey,
     encodeURIComponent(customNote || ""),
   ].join("|");
 
@@ -937,7 +944,7 @@ addToCartBtn?.addEventListener("click", () => {
     qty: nextQty,
     unit: variantLabel,
     price: variantPrice,
-    variantId,
+    variantId: variantIdKey,
     variantLabel,
     title: CURRENT_PRODUCT.title || "",
     img: CURRENT_PRODUCT.img || "",
@@ -945,6 +952,7 @@ addToCartBtn?.addEventListener("click", () => {
     catId: CURRENT_PRODUCT.catId ?? null,
     isCustomOrder: Number(CURRENT_PRODUCT.isCustomOrder || 0),
     stockQty: variantStock,
+    customNote,
   };
 
   setCart(cart);
@@ -958,17 +966,22 @@ addToCartBtn?.addEventListener("click", () => {
 });
 
 /* =========================
-   API
+   API SYNC
 ========================= */
 async function syncProductsFromApi() {
-  try {
-    const res = await fetch(`${API_BASE}/api/products`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const prods = await res.json();
-    if (Array.isArray(prods)) setProds(prods);
-  } catch (e) {
-    console.warn("Не вдалося оновити товари з API:", e);
-  }
+  const res = await fetch(`${API_BASE}/api/products`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+  const prods = await res.json();
+  if (Array.isArray(prods)) setProds(prods);
+}
+
+async function syncCategoriesFromApi() {
+  const res = await fetch(`${API_BASE}/api/categories`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+  const cats = await res.json();
+  if (Array.isArray(cats)) setCats(cats);
 }
 
 /* =========================
@@ -976,7 +989,12 @@ async function syncProductsFromApi() {
 ========================= */
 (async function initProductPage() {
   updateCartBadge();
-  await syncProductsFromApi();
+
+  try {
+    await Promise.all([syncProductsFromApi(), syncCategoriesFromApi()]);
+  } catch (e) {
+    console.warn("Не вдалося оновити дані з API:", e);
+  }
 
   const productId = getProductIdFromUrl();
   const prods = getProds();
