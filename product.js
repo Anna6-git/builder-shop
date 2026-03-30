@@ -35,12 +35,25 @@ function setCats(list) {
   localStorage.setItem(KEY_CATS, JSON.stringify(Array.isArray(list) ? list : []));
 }
 
+function getCart() {
+  return safeParse(localStorage.getItem(KEY_CART), {});
+}
+
 function setCart(obj) {
   localStorage.setItem(KEY_CART, JSON.stringify(obj || {}));
 }
 
-function getCart() {
-  return safeParse(localStorage.getItem(KEY_CART), {});
+function getSession() {
+  return safeParse(localStorage.getItem(KEY_SESSION), null);
+}
+
+function getAdminToken() {
+  return localStorage.getItem(KEY_ADMIN_TOKEN) || "";
+}
+
+function isAdmin() {
+  const u = getSession();
+  return Boolean(getAdminToken()) && u?.role === "admin";
 }
 
 function escapeHTML(str) {
@@ -92,23 +105,56 @@ function productImageSrc(p) {
     : "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='600' height='420' viewBox='0 0 600 420'><rect width='600' height='420' fill='%23eef2f7'/><text x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='%2394a3b8' font-family='Arial' font-size='28'>Немає фото</text></svg>";
 }
 
-function getSession() {
-  return safeParse(localStorage.getItem(KEY_SESSION), null);
-}
+function normalizeVariantsForClient(product) {
+  const variants = Array.isArray(product?.variants) ? product.variants : [];
 
-function getAdminToken() {
-  return localStorage.getItem(KEY_ADMIN_TOKEN) || "";
-}
+  if (variants.length) {
+    return variants
+      .map((v, index) => ({
+        id: Number.isFinite(Number(v?.id)) ? Number(v.id) : index,
+        label: String(v?.label || "").trim(),
+        price: Number(v?.price),
+        stockQty: Number(v?.stockQty ?? 0),
+        sortOrder: Number.isFinite(Number(v?.sortOrder)) ? Number(v.sortOrder) : index,
+      }))
+      .filter(
+        (v) =>
+          v.label &&
+          Number.isFinite(v.price) &&
+          v.price >= 0 &&
+          Number.isFinite(v.stockQty) &&
+          v.stockQty >= 0
+      );
+  }
 
-function isAdmin() {
-  const u = getSession();
-  return Boolean(getAdminToken()) && u?.role === "admin";
+  const fallbackLabel = String(product?.unit || "").trim();
+  const fallbackPrice = Number(product?.price);
+  const fallbackStock = Number(product?.stockQty ?? 0);
+
+  if (
+    fallbackLabel &&
+    Number.isFinite(fallbackPrice) &&
+    fallbackPrice >= 0 &&
+    Number.isFinite(fallbackStock) &&
+    fallbackStock >= 0
+  ) {
+    return [
+      {
+        id: 0,
+        label: fallbackLabel,
+        price: fallbackPrice,
+        stockQty: fallbackStock,
+        sortOrder: 0,
+      },
+    ];
+  }
+
+  return [];
 }
 
 function firstVariant(product) {
-  return Array.isArray(product?.variants) && product.variants.length
-    ? product.variants[0]
-    : null;
+  const variants = normalizeVariantsForClient(product);
+  return variants.length ? variants[0] : null;
 }
 
 function productCardPriceText(product) {
@@ -121,6 +167,9 @@ function productCardUnitText(product) {
   return v?.label || product?.unit || "шт";
 }
 
+/* =========================
+   API
+========================= */
 async function api(path, options = {}) {
   const token = getAdminToken();
 
@@ -149,6 +198,20 @@ async function api(path, options = {}) {
   return data;
 }
 
+async function syncProductsFromApi() {
+  const prods = await api("/products", { method: "GET" });
+  if (Array.isArray(prods)) setProds(prods);
+}
+
+async function syncCategoriesFromApi() {
+  try {
+    const cats = await api("/categories", { method: "GET" });
+    if (Array.isArray(cats)) setCats(cats);
+  } catch (e) {
+    console.warn("Не вдалося оновити категорії:", e);
+  }
+}
+
 /* =========================
    DOM
 ========================= */
@@ -156,6 +219,7 @@ const cartCount = document.getElementById("cartCount");
 
 const productImg = document.getElementById("productImg");
 const productTitle = document.getElementById("productTitle");
+const productPageTitleTop = document.getElementById("productPageTitleTop");
 const productMeta = document.getElementById("productMeta");
 const productPrice = document.getElementById("productPrice");
 const productCode = document.getElementById("productCode");
@@ -208,6 +272,150 @@ const pIdInput = document.getElementById("pIdInput");
 
 let CURRENT_PRODUCT = null;
 let editingProductId = null;
+
+/* =========================
+   ADMIN VARIANTS UI
+========================= */
+function ensureVariantEditorInModal() {
+  if (!adminProductModal) return null;
+
+  let box = document.getElementById("adminVariantsBox");
+  if (box) return box;
+
+  const mountAfter = pStockInput?.parentElement || pStockInput || pUnitInput;
+  if (!mountAfter) return null;
+
+  box = document.createElement("div");
+  box.id = "adminVariantsBox";
+  box.style.marginTop = "14px";
+  box.innerHTML = `
+    <label class="authLabel">Фасування</label>
+    <div id="adminVariantRows" style="display:flex; flex-direction:column; gap:10px; margin-top:8px;"></div>
+    <button class="btn" id="adminAddVariantBtn" type="button" style="margin-top:10px;">+ Додати фасування</button>
+  `;
+
+  const stockLabel = pStockInput?.previousElementSibling;
+  if (stockLabel && stockLabel.parentElement) {
+    stockLabel.insertAdjacentElement("beforebegin", box);
+  } else if (mountAfter.parentElement) {
+    mountAfter.parentElement.insertBefore(box, mountAfter);
+  }
+
+  const addBtn = document.getElementById("adminAddVariantBtn");
+  addBtn?.addEventListener("click", () => {
+    const rows = document.getElementById("adminVariantRows");
+    rows?.appendChild(createAdminVariantRow());
+    syncLegacyFieldsFromAdminVariants();
+  });
+
+  return box;
+}
+
+function createAdminVariantRow(label = "", price = "", stockQty = "") {
+  const row = document.createElement("div");
+  row.className = "adminVariantRow";
+  row.style.display = "grid";
+  row.style.gridTemplateColumns = "1.4fr 1fr 1fr auto";
+  row.style.gap = "8px";
+  row.innerHTML = `
+    <input class="authInput" data-field="label" placeholder="Фасування, напр. 0.9кг" value="${escapeHTML(label)}">
+    <input class="authInput" data-field="price" type="number" step="0.01" min="0" placeholder="Ціна" value="${escapeHTML(price)}">
+    <input class="authInput" data-field="stockQty" type="number" step="0.1" min="0" placeholder="Кількість" value="${escapeHTML(stockQty)}">
+    <button class="btnDanger" type="button" data-act="removeVariant">×</button>
+  `;
+
+  row.addEventListener("input", syncLegacyFieldsFromAdminVariants);
+
+  row.addEventListener("click", (e) => {
+    const act = e.target?.dataset?.act;
+    if (act !== "removeVariant") return;
+
+    const rows = document.getElementById("adminVariantRows");
+    row.remove();
+
+    if (rows && !rows.children.length) {
+      rows.appendChild(createAdminVariantRow());
+    }
+
+    syncLegacyFieldsFromAdminVariants();
+  });
+
+  return row;
+}
+
+function fillAdminVariantRows(variants) {
+  ensureVariantEditorInModal();
+
+  const rows = document.getElementById("adminVariantRows");
+  if (!rows) return;
+
+  rows.innerHTML = "";
+
+  const list = Array.isArray(variants) && variants.length
+    ? variants
+    : [firstVariant(CURRENT_PRODUCT || {})].filter(Boolean);
+
+  if (list.length) {
+    list.forEach((v) => {
+      rows.appendChild(
+        createAdminVariantRow(
+          v?.label || "",
+          Number.isFinite(Number(v?.price)) ? String(v.price) : "",
+          Number.isFinite(Number(v?.stockQty)) ? String(v.stockQty) : ""
+        )
+      );
+    });
+  } else {
+    rows.appendChild(createAdminVariantRow());
+  }
+
+  syncLegacyFieldsFromAdminVariants();
+}
+
+function collectAdminVariants() {
+  const rows = Array.from(document.querySelectorAll("#adminVariantRows .adminVariantRow"));
+
+  return rows
+    .map((row, index) => {
+      const label = row.querySelector('[data-field="label"]')?.value?.trim() || "";
+      const price = Number(row.querySelector('[data-field="price"]')?.value);
+      const stockQty = Number(row.querySelector('[data-field="stockQty"]')?.value || 0);
+
+      return {
+        label,
+        price,
+        stockQty,
+        sortOrder: index,
+      };
+    })
+    .filter(
+      (v) =>
+        v.label ||
+        Number.isFinite(v.price) ||
+        Number.isFinite(v.stockQty)
+    );
+}
+
+function syncLegacyFieldsFromAdminVariants() {
+  const variants = collectAdminVariants();
+
+  if (pPriceInput) {
+    pPriceInput.value = variants.length && Number.isFinite(Number(variants[0].price))
+      ? String(variants[0].price)
+      : "";
+  }
+
+  if (pUnitInput) {
+    pUnitInput.value = variants.length
+      ? variants.map((v) => v.label).filter(Boolean).join(" / ")
+      : "";
+  }
+
+  if (pStockInput) {
+    const total = variants.reduce((sum, v) => sum + Number(v.stockQty || 0), 0);
+    pStockInput.value = variants.length ? String(total) : "";
+  }
+}
 
 /* =========================
    BASIC UI
@@ -284,7 +492,6 @@ function renderRelatedPickerResults(query) {
 
   const currentId = Number(CURRENT_PRODUCT.id);
   const q = String(query || "").trim().toLowerCase();
-
   const all = getProds().filter((p) => Number(p.id) !== currentId);
 
   let list = all;
@@ -306,17 +513,18 @@ function renderRelatedPickerResults(query) {
   }
 
   list.forEach((p) => {
+    const row = document.createElement("div");
+    row.className = "adminRow";
+
     const alreadyAdded =
       Array.isArray(CURRENT_PRODUCT.relatedIds) &&
       CURRENT_PRODUCT.relatedIds.includes(Number(p.id));
 
-    const row = document.createElement("div");
-    row.className = "adminRow";
     row.innerHTML = `
       <div>
         <div style="font-weight:900">${escapeHTML(p.title || "")}</div>
         <div style="font-size:12px;color:#6b7280">
-          ID: ${p.id}${p.brand ? ` • ${escapeHTML(p.brand)}` : ""} • ${productCardPriceText(p)} ₴
+          ID: ${p.id}${p.brand ? ` • ${escapeHTML(p.brand)}` : ""}${Number.isFinite(Number(productCardPriceText(p))) ? ` • ${productCardPriceText(p)} ₴` : ""}
         </div>
       </div>
       <button class="btnPrimary" type="button" data-add-id="${p.id}" ${alreadyAdded ? "disabled" : ""}>
@@ -335,22 +543,18 @@ relatedPickerResults?.addEventListener("click", async (e) => {
   const relatedId = Number(btn.dataset.addId);
   if (!Number.isFinite(relatedId)) return;
 
-  await addRelatedProductById(relatedId);
-});
-
-async function addRelatedProductById(relatedId) {
   if (!CURRENT_PRODUCT || !isAdmin()) return;
 
   const currentRelated = Array.isArray(CURRENT_PRODUCT.relatedIds)
     ? CURRENT_PRODUCT.relatedIds.map(Number).filter(Number.isFinite)
     : [];
 
-  if (currentRelated.includes(Number(relatedId))) {
+  if (currentRelated.includes(relatedId)) {
     if (relatedPickerHint) relatedPickerHint.textContent = "Цей товар уже додано.";
     return;
   }
 
-  const nextRelated = [...currentRelated, Number(relatedId)];
+  const nextRelated = [...currentRelated, relatedId];
 
   try {
     if (relatedPickerHint) relatedPickerHint.textContent = "Додаю...";
@@ -371,7 +575,7 @@ async function addRelatedProductById(relatedId) {
   } catch (err) {
     if (relatedPickerHint) relatedPickerHint.textContent = "Помилка: " + err.message;
   }
-}
+});
 
 /* =========================
    ADMIN MODAL
@@ -382,6 +586,8 @@ function fillProductCategorySelect(selectedId = null) {
       sensitivity: "base",
     })
   );
+
+  if (!pCategoryInput) return;
 
   pCategoryInput.innerHTML = "";
 
@@ -398,28 +604,23 @@ function openProductAdminModal(product) {
   if (!isAdmin()) return;
 
   editingProductId = product?.id || null;
-  adminProductTitle.textContent = "Редагувати товар";
+  if (adminProductTitle) adminProductTitle.textContent = "Редагувати товар";
 
   fillProductCategorySelect(product?.catId || null);
+  ensureVariantEditorInModal();
 
-  const fv = firstVariant(product);
+  const variants = normalizeVariantsForClient(product);
 
-  pTitleInput.value = product?.title || "";
-  pPriceInput.value = fv ? Number(fv.price).toFixed(2) : Number(product?.price || 0).toFixed(2);
-  pBrandInput.value = product?.brand || "";
-  pUnitInput.value = fv?.label || product?.unit || "";
-  pStockInput.value = fv ? String(fv.stockQty ?? 0) : String(product?.stockQty ?? 0);
-  pDescInput.value = product?.description || "";
-  pImgInput.value = product?.img || "";
-  pFileInput.value = "";
-  productFormHint.textContent = "Фасування редагуються в адмін-панелі.";
-
-  pPriceInput.disabled = true;
-  pUnitInput.disabled = true;
-  pStockInput.disabled = true;
-
-  if (pIdInput) {
-    pIdInput.value = product?.id ?? "";
+  if (pTitleInput) pTitleInput.value = product?.title || "";
+  if (pBrandInput) pBrandInput.value = product?.brand || "";
+  if (pDescInput) pDescInput.value = product?.description || "";
+  if (pImgInput) pImgInput.value = product?.img || "";
+  if (pFileInput) pFileInput.value = "";
+  if (pIdInput) pIdInput.value = product?.id ?? "";
+  if (pRelatedInput) {
+    pRelatedInput.value = Array.isArray(product?.relatedIds)
+      ? product.relatedIds.join(",")
+      : "";
   }
 
   if (pOrderTypeInput) {
@@ -427,10 +628,14 @@ function openProductAdminModal(product) {
       Number(product?.isCustomOrder || 0) === 1 ? "custom" : "stock";
   }
 
-  if (pRelatedInput) {
-    pRelatedInput.value = Array.isArray(product?.relatedIds)
-      ? product.relatedIds.join(",")
-      : "";
+  fillAdminVariantRows(variants);
+
+  if (pPriceInput) pPriceInput.readOnly = true;
+  if (pUnitInput) pUnitInput.readOnly = true;
+  if (pStockInput) pStockInput.readOnly = true;
+
+  if (productFormHint) {
+    productFormHint.textContent = "Редагуй фасування нижче. Ціна, одиниця виміру і склад рахуються автоматично.";
   }
 
   if (product?.img) {
@@ -441,25 +646,23 @@ function openProductAdminModal(product) {
     pPreview.removeAttribute("src");
   }
 
-  if (deleteProductBtn) {
-    deleteProductBtn.hidden = false;
-  }
-
-  adminProductModal.setAttribute("aria-hidden", "false");
-  adminProductOverlay.hidden = false;
-  adminProductModal.hidden = false;
+  if (deleteProductBtn) deleteProductBtn.hidden = false;
+  adminProductModal?.setAttribute("aria-hidden", "false");
+  if (adminProductOverlay) adminProductOverlay.hidden = false;
+  if (adminProductModal) adminProductModal.hidden = false;
 }
 
 function closeProductAdminModal() {
-  adminProductModal.setAttribute("aria-hidden", "true");
-  adminProductOverlay.hidden = true;
-  adminProductModal.hidden = true;
-  editingProductId = null;
-  productFormHint.textContent = "";
+  adminProductModal?.setAttribute("aria-hidden", "true");
+  if (adminProductOverlay) adminProductOverlay.hidden = true;
+  if (adminProductModal) adminProductModal.hidden = true;
 
-  pPriceInput.disabled = false;
-  pUnitInput.disabled = false;
-  pStockInput.disabled = false;
+  editingProductId = null;
+
+  if (productFormHint) productFormHint.textContent = "";
+  if (pPriceInput) pPriceInput.readOnly = false;
+  if (pUnitInput) pUnitInput.readOnly = false;
+  if (pStockInput) pStockInput.readOnly = false;
 }
 
 adminProductClose?.addEventListener("click", closeProductAdminModal);
@@ -497,65 +700,86 @@ pFileInput?.addEventListener("change", async () => {
   if (!file) return;
 
   try {
-    productFormHint.textContent = "Завантажую фото...";
+    if (productFormHint) productFormHint.textContent = "Завантажую фото...";
     const url = await uploadImage(file);
-    pImgInput.value = url;
-    pPreview.src = url;
-    pPreview.hidden = false;
-    productFormHint.textContent = "Фото завантажено.";
+    if (pImgInput) pImgInput.value = url;
+    if (pPreview) {
+      pPreview.src = url;
+      pPreview.hidden = false;
+    }
+    if (productFormHint) productFormHint.textContent = "Фото завантажено.";
   } catch (e) {
-    productFormHint.textContent = "Помилка: " + e.message;
+    if (productFormHint) productFormHint.textContent = "Помилка: " + e.message;
   }
 });
 
 saveProductBtn?.addEventListener("click", async () => {
+  if (!editingProductId) return;
+
   try {
     const relatedIds = String(pRelatedInput?.value || "")
       .split(",")
       .map((x) => Number(x.trim()))
       .filter(Number.isFinite);
 
+    const variants = collectAdminVariants();
+
+    if (!variants.length) {
+      if (productFormHint) productFormHint.textContent = "Додай хоча б одне фасування.";
+      return;
+    }
+
+    for (const v of variants) {
+      if (!v.label) {
+        if (productFormHint) productFormHint.textContent = "У кожного фасування має бути назва.";
+        return;
+      }
+      if (!Number.isFinite(v.price) || v.price < 0) {
+        if (productFormHint) productFormHint.textContent = `Невірна ціна для "${v.label}".`;
+        return;
+      }
+      if (!Number.isFinite(v.stockQty) || v.stockQty < 0) {
+        if (productFormHint) productFormHint.textContent = `Невірна кількість для "${v.label}".`;
+        return;
+      }
+    }
+
     const payload = {
-      title: String(pTitleInput.value || "").trim(),
-      catId: Number(pCategoryInput.value),
-      brand: String(pBrandInput.value || "").trim(),
-      description: String(pDescInput.value || "").trim(),
-      img: String(pImgInput.value || "").trim(),
+      title: String(pTitleInput?.value || "").trim(),
+      catId: Number(pCategoryInput?.value),
+      brand: String(pBrandInput?.value || "").trim(),
+      description: String(pDescInput?.value || "").trim(),
+      img: String(pImgInput?.value || "").trim(),
       isActive: 1,
       isCustomOrder: pOrderTypeInput?.value === "custom" ? 1 : 0,
       relatedIds,
+      variants,
     };
 
     if (!payload.title) {
-      productFormHint.textContent = "Введіть назву товару.";
+      if (productFormHint) productFormHint.textContent = "Введіть назву товару.";
       return;
     }
 
-    if (!Number.isFinite(payload.catId) || payload.catId <= 0) {
-      productFormHint.textContent = "Оберіть категорію.";
-      return;
-    }
+    if (productFormHint) productFormHint.textContent = "Зберігаю...";
 
-    productFormHint.textContent = "Зберігаю...";
-
-    if (editingProductId) {
-      await api(`/products/${editingProductId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-    }
+    await api(`/products/${editingProductId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
 
     await syncProductsFromApi();
+    await syncCategoriesFromApi();
 
-    if (editingProductId) {
-      const updated = getProds().find((x) => Number(x.id) === Number(editingProductId));
-      if (updated) renderProduct(updated);
+    const updated = getProds().find((x) => Number(x.id) === Number(editingProductId));
+    if (updated) {
+      renderProduct(updated);
     }
 
     closeProductAdminModal();
   } catch (e) {
-    productFormHint.textContent = "Помилка: " + e.message;
+    if (productFormHint) productFormHint.textContent = "Помилка: " + e.message;
   }
 });
 
@@ -571,7 +795,7 @@ deleteProductBtn?.addEventListener("click", async () => {
     closeProductAdminModal();
     goBackSmart();
   } catch (e) {
-    productFormHint.textContent = "Помилка: " + e.message;
+    if (productFormHint) productFormHint.textContent = "Помилка: " + e.message;
   }
 });
 
@@ -580,57 +804,44 @@ deleteProductBtn?.addEventListener("click", async () => {
 ========================= */
 function fillUnits(product) {
   if (!pUnit) return;
+
   pUnit.innerHTML = "";
 
-  const variants = Array.isArray(product?.variants) ? product.variants : [];
+  const variants = normalizeVariantsForClient(product);
 
   if (variants.length) {
     variants.forEach((variant, index) => {
       const opt = document.createElement("option");
-      const key = String(variant.id ?? `idx_${index}`);
-      opt.value = key;
+      opt.value = String(variant.id ?? index);
       opt.textContent = variant.label;
+      opt.dataset.variantId = String(variant.id ?? index);
       pUnit.appendChild(opt);
     });
     return;
   }
 
   const opt = document.createElement("option");
-  opt.value = "base";
+  opt.value = product?.unit || "шт";
   opt.textContent = product?.unit || "шт";
   pUnit.appendChild(opt);
 }
 
-function getSelectedVariantEntry(product) {
-  const variants = Array.isArray(product?.variants) ? product.variants : [];
+function getSelectedVariant(product) {
+  const variants = normalizeVariantsForClient(product);
   if (!variants.length) return null;
 
   const selectedValue = String(pUnit?.value || "");
-  const index = variants.findIndex(
-    (v, i) => String(v.id ?? `idx_${i}`) === selectedValue
+  return (
+    variants.find((v, index) => String(v.id ?? index) === selectedValue) ||
+    variants[0]
   );
-
-  if (index === -1) {
-    return {
-      variant: variants[0],
-      index: 0,
-      key: String(variants[0].id ?? "idx_0"),
-    };
-  }
-
-  return {
-    variant: variants[index],
-    index,
-    key: String(variants[index].id ?? `idx_${index}`),
-  };
 }
 
 function updateProductPriceAndStock(product) {
   if (!product) return;
 
   const isCustom = Number(product.isCustomOrder || 0) === 1;
-  const selected = getSelectedVariantEntry(product);
-  const variant = selected?.variant || null;
+  const variant = getSelectedVariant(product);
 
   const activePrice = variant
     ? Number(variant.price || 0)
@@ -693,7 +904,11 @@ pUnit?.addEventListener("change", () => {
 
 function renderProduct(product) {
   const isCustom = Number(product.isCustomOrder || 0) === 1;
-  CURRENT_PRODUCT = product;
+
+  CURRENT_PRODUCT = {
+    ...product,
+    variants: normalizeVariantsForClient(product),
+  };
 
   if (productCustomBadge) productCustomBadge.hidden = !isCustom;
   if (productCustomHint) productCustomHint.hidden = !isCustom;
@@ -701,7 +916,6 @@ function renderProduct(product) {
 
   if (productCustomNote) {
     productCustomNote.hidden = !isCustom;
-    productCustomNote.value = "";
     productCustomNote.placeholder =
       product.customNotePlaceholder || "Вкажіть уточнення до замовлення";
   }
@@ -716,10 +930,11 @@ function renderProduct(product) {
   }
 
   if (productTitle) productTitle.textContent = product.title || "Товар";
+  if (productPageTitleTop) productPageTitleTop.textContent = "Товар";
   document.title = `${product.title || "Товар"} — БудМаркет`;
 
-  fillUnits(product);
-  updateProductPriceAndStock(product);
+  fillUnits(CURRENT_PRODUCT);
+  updateProductPriceAndStock(CURRENT_PRODUCT);
 
   if (productCode) {
     if (isAdmin()) {
@@ -736,7 +951,7 @@ function renderProduct(product) {
       : "Опис відсутній.";
   }
 
-  renderRelated(product);
+  renderRelated(CURRENT_PRODUCT);
 }
 
 function renderRelated(product) {
@@ -817,7 +1032,6 @@ function renderRelated(product) {
         const freshBeforeUpdate = getProds().find(
           (x) => Number(x.id) === currentProductId
         );
-
         const currentRelated = Array.isArray(freshBeforeUpdate?.relatedIds)
           ? freshBeforeUpdate.relatedIds.map(Number).filter(Number.isFinite)
           : [];
@@ -837,7 +1051,6 @@ function renderRelated(product) {
         const freshCurrent = getProds().find(
           (x) => Number(x.id) === currentProductId
         );
-
         if (freshCurrent) {
           CURRENT_PRODUCT = freshCurrent;
           renderRelated(freshCurrent);
@@ -855,12 +1068,11 @@ function renderRelated(product) {
    CART
 ========================= */
 function getSelectedVariantState() {
-  const selected = getSelectedVariantEntry(CURRENT_PRODUCT);
-  const variant = selected?.variant || null;
+  const variant = getSelectedVariant(CURRENT_PRODUCT);
 
   return {
     variant,
-    variantIdKey: selected?.key || "base",
+    variantId: variant ? Number(variant.id ?? 0) : 0,
     variantLabel: variant
       ? String(variant.label || CURRENT_PRODUCT.unit || "шт")
       : String(CURRENT_PRODUCT.unit || "шт"),
@@ -909,7 +1121,7 @@ addToCartBtn?.addEventListener("click", () => {
     return;
   }
 
-  const { variantIdKey, variantLabel, variantPrice, variantStock } =
+  const { variantId, variantLabel, variantPrice, variantStock } =
     getSelectedVariantState();
 
   if (!isCustom && variantStock > 0 && qty > variantStock) {
@@ -923,7 +1135,7 @@ addToCartBtn?.addEventListener("click", () => {
 
   const key = [
     CURRENT_PRODUCT.id,
-    variantIdKey,
+    variantId,
     encodeURIComponent(customNote || ""),
   ].join("|");
 
@@ -944,7 +1156,7 @@ addToCartBtn?.addEventListener("click", () => {
     qty: nextQty,
     unit: variantLabel,
     price: variantPrice,
-    variantId: variantIdKey,
+    variantId,
     variantLabel,
     title: CURRENT_PRODUCT.title || "",
     img: CURRENT_PRODUCT.img || "",
@@ -952,7 +1164,6 @@ addToCartBtn?.addEventListener("click", () => {
     catId: CURRENT_PRODUCT.catId ?? null,
     isCustomOrder: Number(CURRENT_PRODUCT.isCustomOrder || 0),
     stockQty: variantStock,
-    customNote,
   };
 
   setCart(cart);
@@ -966,63 +1177,46 @@ addToCartBtn?.addEventListener("click", () => {
 });
 
 /* =========================
-   API SYNC
-========================= */
-async function syncProductsFromApi() {
-  const res = await fetch(`${API_BASE}/api/products`);
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-  const prods = await res.json();
-  if (Array.isArray(prods)) setProds(prods);
-}
-
-async function syncCategoriesFromApi() {
-  const res = await fetch(`${API_BASE}/api/categories`);
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-  const cats = await res.json();
-  if (Array.isArray(cats)) setCats(cats);
-}
-
-/* =========================
    INIT
 ========================= */
 (async function initProductPage() {
-  updateCartBadge();
-
   try {
-    await Promise.all([syncProductsFromApi(), syncCategoriesFromApi()]);
+    updateCartBadge();
+    ensureVariantEditorInModal();
+    await syncCategoriesFromApi();
+    await syncProductsFromApi();
+
+    const productId = getProductIdFromUrl();
+    const prods = getProds();
+
+    if (!Number.isFinite(productId) || productId <= 0) {
+      if (productTitle) productTitle.textContent = "Товар не знайдено";
+      if (productMeta) productMeta.textContent = "Некоректне посилання на товар.";
+      if (productPrice) productPrice.textContent = "0.00 ₴";
+      if (productDescription) {
+        productDescription.textContent = "У URL немає правильного id товару.";
+      }
+      if (relatedGrid) relatedGrid.innerHTML = "";
+      return;
+    }
+
+    const product = prods.find((p) => Number(p.id) === Number(productId));
+
+    if (!product) {
+      if (productTitle) productTitle.textContent = "Товар не знайдено";
+      if (productMeta) productMeta.textContent = "Такий товар відсутній у базі.";
+      if (productPrice) productPrice.textContent = "0.00 ₴";
+      if (productDescription) {
+        productDescription.textContent =
+          "Можливо, товар був видалений або ще не завантажився.";
+      }
+      if (relatedGrid) relatedGrid.innerHTML = "";
+      return;
+    }
+
+    renderProduct(product);
   } catch (e) {
-    console.warn("Не вдалося оновити дані з API:", e);
+    console.error(e);
+    if (productHint) productHint.textContent = "Помилка завантаження сторінки товару.";
   }
-
-  const productId = getProductIdFromUrl();
-  const prods = getProds();
-
-  if (!Number.isFinite(productId) || productId <= 0) {
-    if (productTitle) productTitle.textContent = "Товар не знайдено";
-    if (productMeta) productMeta.textContent = "Некоректне посилання на товар.";
-    if (productPrice) productPrice.textContent = "0.00 ₴";
-    if (productDescription) {
-      productDescription.textContent = "У URL немає правильного id товару.";
-    }
-    if (relatedGrid) relatedGrid.innerHTML = "";
-    return;
-  }
-
-  const product = prods.find((p) => Number(p.id) === Number(productId));
-
-  if (!product) {
-    if (productTitle) productTitle.textContent = "Товар не знайдено";
-    if (productMeta) productMeta.textContent = "Такий товар відсутній у базі.";
-    if (productPrice) productPrice.textContent = "0.00 ₴";
-    if (productDescription) {
-      productDescription.textContent =
-        "Можливо, товар був видалений або ще не завантажився.";
-    }
-    if (relatedGrid) relatedGrid.innerHTML = "";
-    return;
-  }
-
-  renderProduct(product);
 })();
