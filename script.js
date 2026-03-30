@@ -1068,9 +1068,7 @@ const productOptions = [
   )
 ].join("");
 
-const selectedProduct = prods.find(
-  (p) => safeSlide.linkType === "product" && String(p.id) === safeSlide.linkValue
-);
+
 
     const card = document.createElement("div");
     card.className = "slideAdminCard";
@@ -1119,18 +1117,10 @@ const selectedProduct = prods.find(
         </select>
 
         <input
-  class="authInput slideProductSearch"
-  data-index="${index}"
-  placeholder="Пошук товару..."
-  value="${escapeHTML(selectedProduct?.title || "")}"
-  ${safeSlide.linkType === "product" ? "" : "hidden"}
->
-
 <select
   class="authInput slideProductSelect"
   data-field="productValue"
   data-index="${index}"
-  size="8"
   ${safeSlide.linkType === "product" ? "" : "hidden"}
 >
   ${productOptions}
@@ -1184,53 +1174,12 @@ slidesAdminList.querySelectorAll(".slideLinkTypeInput").forEach((select) => {
     const linkType = select.value;
 
     const categorySelect = slidesAdminList.querySelector(`.slideCategorySelect[data-index="${index}"]`);
-    const productSearch = slidesAdminList.querySelector(`.slideProductSearch[data-index="${index}"]`);
     const productSelect = slidesAdminList.querySelector(`.slideProductSelect[data-index="${index}"]`);
 
     if (categorySelect) categorySelect.hidden = linkType !== "category";
-    if (productSearch) productSearch.hidden = linkType !== "product";
     if (productSelect) productSelect.hidden = linkType !== "product";
   });
 });
-
-slidesAdminList.querySelectorAll(".slideProductSearch").forEach((input) => {
-  input.addEventListener("input", () => {
-    const index = Number(input.dataset.index);
-    const q = String(input.value || "").trim().toLowerCase();
-
-    const productSelect = slidesAdminList.querySelector(`.slideProductSelect[data-index="${index}"]`);
-    if (!productSelect) return;
-
-    const currentValue = String(productSelect.value || "");
-
-    const filtered = q
-      ? prods.filter((p) => String(p.title || "").toLowerCase().includes(q))
-      : prods;
-
-    productSelect.innerHTML = [
-      `<option value="">Оберіть товар</option>`,
-      ...filtered.map(
-        (p) =>
-          `<option value="${escapeHTML(String(p.id))}" ${
-            String(p.id) === currentValue ? "selected" : ""
-          }>${escapeHTML(p.title)}</option>`
-      )
-    ].join("");
-  });
-});
-
-slidesAdminList.querySelectorAll(".slideProductSelect").forEach((select) => {
-  select.addEventListener("change", () => {
-    const index = Number(select.dataset.index);
-    const productSearch = slidesAdminList.querySelector(`.slideProductSearch[data-index="${index}"]`);
-    const selectedOption = select.options[select.selectedIndex];
-
-    if (productSearch && selectedOption) {
-      productSearch.value = selectedOption.value ? selectedOption.textContent : "";
-    }
-  });
-});
-
   slidesAdminList.querySelectorAll('[data-act="save-slide"]').forEach((btn) => {
     btn.addEventListener("click", async () => {
       const index = Number(btn.dataset.index);
