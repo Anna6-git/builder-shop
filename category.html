@@ -64,14 +64,8 @@
     <label class="authLabel">Категорія</label>
     <select class="authInput" id="pCategoryInput"></select>
 
-    <label class="authLabel">Ціна</label>
-    <input class="authInput" id="pPriceInput" type="number" step="0.01" placeholder="14.50">
-
     <label class="authLabel">Виробник</label>
     <input class="authInput" id="pBrandInput" placeholder="Knauf">
-
-    <label class="authLabel">Одиниця виміру</label>
-    <input class="authInput" id="pUnitInput" placeholder="шт / мішок / м2 / м³ / палета">
 
     <label class="authLabel">Тип товару</label>
     <select class="authInput" id="pOrderTypeInput">
@@ -79,8 +73,9 @@
       <option value="custom">Під замовлення</option>
     </select>
 
-    <label class="authLabel">Кількість на складі</label>
-    <input class="authInput" id="pStockInput" type="number" step="0.1" placeholder="0">
+    <label class="authLabel">Фасування</label>
+    <div id="variantRows" style="display:flex;flex-direction:column;gap:10px;margin-bottom:10px;"></div>
+    <button class="btn" id="addVariantRowBtn" type="button" style="margin-bottom:14px;">+ Додати фасування</button>
 
     <label class="authLabel">Опис</label>
     <textarea class="authInput" id="pDescInput" rows="4" placeholder="Опис товару"></textarea>

@@ -58,6 +58,34 @@ function isAdmin() {
   return Boolean(getAdminToken()) && u?.role === "admin";
 }
 
+async function api(path, options = {}) {
+  const token = getAdminToken();
+
+  const res = await fetch(`${API_BASE}/api${path}`, {
+    ...options,
+    headers: {
+      ...(options.headers || {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {})
+    }
+  });
+
+  const ct = res.headers.get("content-type") || "";
+  const isJson = ct.includes("application/json");
+  const data = isJson
+    ? await res.json().catch(() => null)
+    : await res.text().catch(() => null);
+
+  if (!res.ok) {
+    const msg =
+      (data && typeof data === "object" && (data.error || data.message)) ||
+      (typeof data === "string" ? data : "") ||
+      `HTTP ${res.status}`;
+    throw new Error(msg);
+  }
+
+  return data;
+}
+
 function escapeHTML(str) {
   return String(str ?? "")
     .replaceAll("&", "&amp;")
@@ -71,6 +99,13 @@ function formatPrice(n) {
   const num = Number(n);
   if (!Number.isFinite(num)) return "0.00";
   return num.toFixed(2);
+}
+
+function parseLooseNumber(value) {
+  const raw = String(value ?? "").trim().replace(",", ".");
+  if (!raw) return NaN;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : NaN;
 }
 
 function productImageSrc(p) {
@@ -88,13 +123,6 @@ function categoryImageSrc(c) {
 function getCategoryIdFromUrl() {
   const params = new URLSearchParams(window.location.search);
   return Number(params.get("cat"));
-}
-
-function parseLooseNumber(value) {
-  const raw = String(value ?? "").trim().replace(",", ".");
-  if (!raw) return NaN;
-  const n = Number(raw);
-  return Number.isFinite(n) ? n : NaN;
 }
 
 function normalizeVariantsForClient(product) {
@@ -159,46 +187,22 @@ function productCardUnitText(product) {
   return v?.label || product?.unit || "шт";
 }
 
-/* =========================
-   API
-========================= */
-async function api(path, options = {}) {
-  const token = getAdminToken();
-
-  const res = await fetch(`${API_BASE}/api${path}`, {
-    ...options,
-    headers: {
-      ...(options.headers || {}),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-  });
-
-  const ct = res.headers.get("content-type") || "";
-  const isJson = ct.includes("application/json");
-  const data = isJson
-    ? await res.json().catch(() => null)
-    : await res.text().catch(() => null);
-
-  if (!res.ok) {
-    const msg =
-      (data && typeof data === "object" && (data.error || data.message)) ||
-      (typeof data === "string" ? data : "") ||
-      `HTTP ${res.status}`;
-    throw new Error(msg);
-  }
-
-  return data;
-}
-
 async function syncFromApi() {
   try {
-    const [cats, prods] = await Promise.all([
-      api("/categories", { method: "GET" }),
-      api("/products", { method: "GET" }),
+    const [catsRes, prodsRes] = await Promise.all([
+      fetch(`${API_BASE}/api/categories`),
+      fetch(`${API_BASE}/api/products`)
     ]);
 
-    if (Array.isArray(cats)) setCats(cats);
-    if (Array.isArray(prods)) setProds(prods);
+    if (catsRes.ok) {
+      const cats = await catsRes.json();
+      if (Array.isArray(cats)) setCats(cats);
+    }
+
+    if (prodsRes.ok) {
+      const prods = await prodsRes.json();
+      if (Array.isArray(prods)) setProds(prods);
+    }
   } catch (e) {
     console.warn("syncFromApi failed:", e);
   }
@@ -222,10 +226,7 @@ const adminAddProductBtn = document.getElementById("adminAddProductBtn");
 
 const pTitleInput = document.getElementById("pTitleInput");
 const pCategoryInput = document.getElementById("pCategoryInput");
-const pPriceInput = document.getElementById("pPriceInput");
 const pBrandInput = document.getElementById("pBrandInput");
-const pUnitInput = document.getElementById("pUnitInput");
-const pStockInput = document.getElementById("pStockInput");
 const pOrderTypeInput = document.getElementById("pOrderTypeInput");
 const pDescInput = document.getElementById("pDescInput");
 const pImgInput = document.getElementById("pImgInput");
@@ -234,8 +235,92 @@ const pPreview = document.getElementById("pPreview");
 const saveProductBtn = document.getElementById("saveProductBtn");
 const deleteProductBtn = document.getElementById("deleteProductBtn");
 const productFormHint = document.getElementById("productFormHint");
+const variantRows = document.getElementById("variantRows");
+const addVariantRowBtn = document.getElementById("addVariantRowBtn");
 
 let editingProductId = null;
+
+/* =========================
+   VARIANTS UI
+========================= */
+function createVariantRow(label = "", price = "", stockQty = "") {
+  const row = document.createElement("div");
+  row.className = "variantRow";
+  row.style.display = "grid";
+  row.style.gridTemplateColumns = "1.3fr 1fr 1fr auto";
+  row.style.gap = "8px";
+
+  row.innerHTML = `
+    <input class="authInput" data-field="label" placeholder="Фасування, напр. 0.9кг" value="${escapeHTML(label)}">
+    <input class="authInput" data-field="price" type="number" step="0.01" min="0" placeholder="Ціна" value="${escapeHTML(price)}">
+    <input class="authInput" data-field="stockQty" type="number" step="0.1" min="0" placeholder="Кількість" value="${escapeHTML(stockQty)}">
+    <button class="btnDanger" type="button" data-act="removeVariant">×</button>
+  `;
+
+  row.addEventListener("click", (e) => {
+    if (e.target?.dataset?.act !== "removeVariant") return;
+
+    row.remove();
+
+    if (!variantRows.children.length) {
+      variantRows.appendChild(createVariantRow());
+    }
+  });
+
+  return row;
+}
+
+function resetVariantRows() {
+  if (!variantRows) return;
+  variantRows.innerHTML = "";
+  variantRows.appendChild(createVariantRow());
+}
+
+function fillVariantRows(variants) {
+  if (!variantRows) return;
+
+  variantRows.innerHTML = "";
+
+  if (Array.isArray(variants) && variants.length) {
+    variants.forEach((v) => {
+      variantRows.appendChild(
+        createVariantRow(
+          v?.label || "",
+          Number.isFinite(Number(v?.price)) ? String(v.price) : "",
+          Number.isFinite(Number(v?.stockQty)) ? String(v.stockQty) : ""
+        )
+      );
+    });
+  } else {
+    variantRows.appendChild(createVariantRow());
+  }
+}
+
+function collectVariantsFromForm() {
+  const rows = Array.from(variantRows.querySelectorAll(".variantRow"));
+
+  return rows
+    .map((row, index) => {
+      const labelRaw = row.querySelector('[data-field="label"]')?.value ?? "";
+      const priceRaw = row.querySelector('[data-field="price"]')?.value ?? "";
+      const stockRaw = row.querySelector('[data-field="stockQty"]')?.value ?? "";
+
+      const label = String(labelRaw).trim();
+      const price = parseLooseNumber(priceRaw);
+      const stockQty = parseLooseNumber(stockRaw);
+
+      const isEmpty = !label && !String(priceRaw).trim() && !String(stockRaw).trim();
+      if (isEmpty) return null;
+
+      return {
+        label,
+        price,
+        stockQty,
+        sortOrder: index,
+      };
+    })
+    .filter(Boolean);
+}
 
 /* =========================
    BASIC UI
@@ -254,9 +339,7 @@ function goBackSmart() {
 
 function fillProductCategorySelect(selectedId = null) {
   const cats = getCats().slice().sort((a, b) =>
-    String(a.name || "").localeCompare(String(b.name || ""), "uk", {
-      sensitivity: "base",
-    })
+    String(a.name || "").localeCompare(String(b.name || ""), "uk", { sensitivity: "base" })
   );
 
   if (!pCategoryInput) return;
@@ -272,9 +355,6 @@ function fillProductCategorySelect(selectedId = null) {
   });
 }
 
-/* =========================
-   ADMIN MODAL
-========================= */
 function openProductAdminModal(product = null) {
   if (!isAdmin()) return;
 
@@ -285,20 +365,19 @@ function openProductAdminModal(product = null) {
 
   fillProductCategorySelect(product?.catId || getCategoryIdFromUrl() || null);
 
-  const fv = firstVariant(product);
+  const variants = normalizeVariantsForClient(product);
 
   if (pTitleInput) pTitleInput.value = product?.title || "";
-  if (pPriceInput) pPriceInput.value = fv ? String(fv.price ?? "") : "";
   if (pBrandInput) pBrandInput.value = product?.brand || "";
-  if (pUnitInput) pUnitInput.value = fv?.label || "";
   if (pOrderTypeInput) {
     pOrderTypeInput.value = Number(product?.isCustomOrder || 0) === 1 ? "custom" : "stock";
   }
-  if (pStockInput) pStockInput.value = fv ? String(fv.stockQty ?? 0) : "0";
   if (pDescInput) pDescInput.value = product?.description || "";
   if (pImgInput) pImgInput.value = product?.img || "";
   if (pFileInput) pFileInput.value = "";
   if (productFormHint) productFormHint.textContent = "";
+
+  fillVariantRows(variants);
 
   if (pPreview) {
     if (product?.img) {
@@ -325,6 +404,7 @@ function closeProductAdminModal() {
     adminProductModal.hidden = true;
     adminProductModal.setAttribute("aria-hidden", "true");
   }
+
   editingProductId = null;
 }
 
@@ -350,9 +430,7 @@ function renderCategoryPage() {
   const list = prods
     .filter((p) => Number(p.catId) === Number(cat.id))
     .sort((a, b) =>
-      String(a.title || "").localeCompare(String(b.title || ""), "uk", {
-        sensitivity: "base",
-      })
+      String(a.title || "").localeCompare(String(b.title || ""), "uk", { sensitivity: "base" })
     );
 
   document.title = `${cat.name} — БудМаркет`;
@@ -373,16 +451,19 @@ function renderCategoryPage() {
   }
 
   list.forEach((p) => {
+    const variants = normalizeVariantsForClient(p);
+
+    const variantsText = variants.length
+      ? variants
+          .map(
+            (v) =>
+              `${v.label}: ${formatPrice(v.price)} ₴ • склад: ${Number(v.stockQty ?? 0)}`
+          )
+          .join("<br>")
+      : "Фасування не задані";
+
     const card = document.createElement("article");
     card.className = "prodCard";
-
-    const fv = firstVariant(p);
-    const stockText =
-      Number(p.isCustomOrder || 0) === 1
-        ? "Під замовлення"
-        : Number(fv?.stockQty ?? p.stockQty ?? 0) > 0
-          ? `В наявності: ${Number(fv?.stockQty ?? p.stockQty ?? 0)}`
-          : "Немає в наявності";
 
     card.innerHTML = `
       <div class="prodCard__main">
@@ -390,11 +471,13 @@ function renderCategoryPage() {
         <div class="prodBody">
           <h3 class="prodTitle">${escapeHTML(p.title)}</h3>
           <p class="prodMeta">
-            ${escapeHTML(p.brand || "")}${p.brand ? " • " : ""}${escapeHTML(productCardUnitText(p))}
+            ${escapeHTML(p.brand || "")}
           </p>
-          <p class="prodMeta">${escapeHTML(stockText)}</p>
           <div class="prodBottom">
             <div class="prodPrice">${productCardPriceText(p)} ₴</div>
+          </div>
+          <div class="prodMeta" style="margin-top:8px;">
+            ${variantsText}
           </div>
         </div>
       </div>
@@ -473,11 +556,12 @@ adminAddProductBtn?.addEventListener("click", () => {
 adminProductClose?.addEventListener("click", closeProductAdminModal);
 adminProductOverlay?.addEventListener("click", closeProductAdminModal);
 
+addVariantRowBtn?.addEventListener("click", () => {
+  variantRows?.appendChild(createVariantRow());
+});
+
 pImgInput?.addEventListener("input", () => {
-  const url = String(pImgInput?.value || "").trim();
-
-  if (!pPreview) return;
-
+  const url = (pImgInput.value || "").trim();
   if (url) {
     pPreview.src = url;
     pPreview.hidden = false;
@@ -488,19 +572,17 @@ pImgInput?.addEventListener("input", () => {
 });
 
 pFileInput?.addEventListener("change", async () => {
-  const file = pFileInput?.files?.[0];
+  const file = pFileInput.files?.[0];
   if (!file) return;
 
   try {
     if (productFormHint) productFormHint.textContent = "Завантажую фото...";
     const url = await uploadImage(file);
-
     if (pImgInput) pImgInput.value = url;
     if (pPreview) {
       pPreview.src = url;
       pPreview.hidden = false;
     }
-
     if (productFormHint) productFormHint.textContent = "Фото завантажено.";
   } catch (e) {
     if (productFormHint) productFormHint.textContent = "Помилка: " + e.message;
@@ -511,13 +593,11 @@ saveProductBtn?.addEventListener("click", async () => {
   try {
     const title = String(pTitleInput?.value || "").trim();
     const catId = Number(pCategoryInput?.value);
-    const price = parseLooseNumber(pPriceInput?.value);
     const brand = String(pBrandInput?.value || "").trim();
-    const unitLabel = String(pUnitInput?.value || "").trim();
-    const stockQty = parseLooseNumber(pStockInput?.value);
     const description = String(pDescInput?.value || "").trim();
     const img = String(pImgInput?.value || "").trim();
     const isCustomOrder = pOrderTypeInput?.value === "custom" ? 1 : 0;
+    const variants = collectVariantsFromForm();
 
     if (!title) {
       if (productFormHint) productFormHint.textContent = "Введіть назву товару.";
@@ -534,19 +614,26 @@ saveProductBtn?.addEventListener("click", async () => {
       return;
     }
 
-    if (!unitLabel) {
-      if (productFormHint) productFormHint.textContent = "Введіть фасування, наприклад 0.9кг.";
+    if (!variants.length) {
+      if (productFormHint) productFormHint.textContent = "Додай хоча б одне фасування.";
       return;
     }
 
-    if (!Number.isFinite(price) || price < 0) {
-      if (productFormHint) productFormHint.textContent = "Невірна ціна.";
-      return;
-    }
+    for (const v of variants) {
+      if (!v.label) {
+        if (productFormHint) productFormHint.textContent = "У кожного фасування має бути назва.";
+        return;
+      }
 
-    if (!Number.isFinite(stockQty) || stockQty < 0) {
-      if (productFormHint) productFormHint.textContent = "Невірна кількість на складі.";
-      return;
+      if (!Number.isFinite(v.price) || v.price < 0) {
+        if (productFormHint) productFormHint.textContent = `Невірна ціна для "${v.label}".`;
+        return;
+      }
+
+      if (!Number.isFinite(v.stockQty) || v.stockQty < 0) {
+        if (productFormHint) productFormHint.textContent = `Невірна кількість для "${v.label}".`;
+        return;
+      }
     }
 
     const payload = {
@@ -557,14 +644,7 @@ saveProductBtn?.addEventListener("click", async () => {
       description,
       isCustomOrder,
       isActive: 1,
-      variants: [
-        {
-          label: unitLabel,
-          price,
-          stockQty,
-          sortOrder: 0,
-        },
-      ],
+      variants,
     };
 
     if (productFormHint) productFormHint.textContent = "Зберігаю...";
@@ -623,6 +703,7 @@ function refreshAdminUI() {
 (async function initCategoryPage() {
   updateCartBadge();
   refreshAdminUI();
+  resetVariantRows();
   await syncFromApi();
   renderCategoryPage();
 })();
