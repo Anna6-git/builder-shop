@@ -1116,15 +1116,14 @@ const productOptions = [
           ${categoryOptions}
         </select>
 
-        <input
-<select
-  class="authInput slideProductSelect"
-  data-field="productValue"
-  data-index="${index}"
-  ${safeSlide.linkType === "product" ? "" : "hidden"}
->
-  ${productOptions}
-</select>
+        <select
+          class="authInput slideProductSelect"
+          data-field="productValue"
+          data-index="${index}"
+          ${safeSlide.linkType === "product" ? "" : "hidden"}
+        >
+          ${productOptions}
+        </select>
 
         <input
           class="authInput"
