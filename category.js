@@ -225,6 +225,7 @@ const adminProductTitle = document.getElementById("adminProductTitle");
 const adminAddProductBtn = document.getElementById("adminAddProductBtn");
 
 const pTitleInput = document.getElementById("pTitleInput");
+const pCategorySearch = document.getElementById("pCategorySearch");
 const pCategoryInput = document.getElementById("pCategoryInput");
 const pBrandInput = document.getElementById("pBrandInput");
 const pOrderTypeInput = document.getElementById("pOrderTypeInput");
@@ -337,23 +338,45 @@ function goBackSmart() {
   window.location.href = "index.html";
 }
 
-function fillProductCategorySelect(selectedId = null) {
-  const cats = getCats().slice().sort((a, b) =>
-    String(a.name || "").localeCompare(String(b.name || ""), "uk", { sensitivity: "base" })
-  );
+function fillProductCategorySelect(selectedId = null, search = "") {
+  const cats = getCats()
+    .slice()
+    .sort((a, b) =>
+      String(a.name || "").localeCompare(String(b.name || ""), "uk", {
+        sensitivity: "base",
+      })
+    );
 
   if (!pCategoryInput) return;
 
+  const q = String(search || "").trim().toLowerCase();
+
+  const filtered = q
+    ? cats.filter((c) => String(c.name || "").toLowerCase().includes(q))
+    : cats;
+
   pCategoryInput.innerHTML = "";
 
-  cats.forEach((c) => {
+  filtered.forEach((c) => {
     const opt = document.createElement("option");
     opt.value = String(c.id);
     opt.textContent = c.name;
     if (Number(selectedId) === Number(c.id)) opt.selected = true;
     pCategoryInput.appendChild(opt);
   });
+
+  if (!filtered.length) {
+    const opt = document.createElement("option");
+    opt.value = "";
+    opt.textContent = "Нічого не знайдено";
+    pCategoryInput.appendChild(opt);
+  }
 }
+
+pCategorySearch?.addEventListener("input", () => {
+  const selectedId = Number(pCategoryInput?.value || 0) || null;
+  fillProductCategorySelect(selectedId, pCategorySearch.value);
+});
 
 function openProductAdminModal(product = null) {
   if (!isAdmin()) return;
@@ -364,6 +387,9 @@ function openProductAdminModal(product = null) {
   }
 
   fillProductCategorySelect(product?.catId || getCategoryIdFromUrl() || null);
+
+  if (pCategorySearch) pCategorySearch.value = "";
+fillProductCategorySelect(product?.catId || getCategoryIdFromUrl() || null, "");
 
   const variants = normalizeVariantsForClient(product);
 
