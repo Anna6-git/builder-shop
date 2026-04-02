@@ -1,18 +1,23 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://anna6-git.github.io/builder-shop/</loc>
+    <loc>https://www.bydmarket.com.ua/</loc>
+    <lastmod>2026-04-02</lastmod>
+    <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://anna6-git.github.io/builder-shop/index.html</loc>
+    <loc>https://www.bydmarket.com.ua/cart.html</loc>
+    <lastmod>2026-04-02</lastmod>
+    <priority>0.5</priority>
   </url>
   <url>
-    <loc>https://anna6-git.github.io/builder-shop/cart.html</loc>
+    <loc>https://www.bydmarket.com.ua/category.html</loc>
+    <lastmod>2026-04-02</lastmod>
+    <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://anna6-git.github.io/builder-shop/category.html</loc>
-  </url>
-  <url>
-    <loc>https://anna6-git.github.io/builder-shop/product.html</loc>
+    <loc>https://www.bydmarket.com.ua/product.html</loc>
+    <lastmod>2026-04-02</lastmod>
+    <priority>0.8</priority>
   </url>
 </urlset>

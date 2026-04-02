@@ -1527,6 +1527,11 @@ body.miniModalOpen {
   color: #111827;
 }
 
+/* Це змусить атрибут [hidden] працювати, незважаючи на display: grid */
+.callFabMenu[hidden] {
+  display: none !important;
+}
+
 /* =========================
    CART PAGE
 ========================= */
