@@ -7,6 +7,9 @@
 <title>БудМаркет — будівельний магазин у Радомишлі</title>
 <meta name="description" content="БудМаркет — будівельний магазин у Радомишлі. Газобетон, цемент, кільця бетонні, профілі, утеплювач та доставка по Радомишлю.">
 <link rel="stylesheet" href="./style.css">
+<link rel="icon" type="image/png" href="assets/logo.png">
+
+<link rel="apple-touch-icon" href="assets/logo.png">
 
 <script type="application/ld+json">
 {
@@ -189,11 +192,12 @@
 
 
 
-<section class="catalogSection reveal">
+  <section class="catalogSection reveal">
     <div class="sectionHead">
       <h1 class="sectionTitle">Каталог будівельних матеріалів</h1>
       <button id="adminAddCategoryBtn" class="btnPrimary adminOnly" hidden type="button">+ Категорія</button>
     </div>
+  </section>
 
 
 <div class="modalOverlay" id="modalOverlay"></div>
@@ -432,15 +436,13 @@
   </div>
 </div>
 
-</main> <footer class="siteFooter" style="text-align: center; padding: 40px 20px; margin-top: 40px; background: var(--card); border-top: 1px solid var(--line);">
-  <h2 style="font-size: 16px; margin-bottom: 12px;">Про БудМаркет</h2>
-  <p style="color: var(--muted); font-size: 14px; max-width: 600px; margin: 0 auto 12px; line-height: 1.5;">
-    Магазин будівельних матеріалів у Радомишлі. Пропонуємо газобетон, цемент, бетонні кільця, профілі, утеплювач, будівельні суміші та інші товари для ремонту.
-  </p>
-  <p style="color: var(--muted); font-size: 14px; margin: 0;">
-    📍 вул. Міськради, Радомишль, 12201 <br>
-    📞 <a href="tel:+380988966988" style="color: var(--text); text-decoration: none; font-weight: 600;">+38 (098) 896-69-88</a>
-  </p>
+<div id="catalogGrid" class="catalogGrid"></div>
+  </section>
+
+</main> <footer class="siteFooter" style="text-align: center; padding: 40px 20px; background: var(--card); border-top: 1px solid var(--line); margin-top: 40px;">
+  <p style="font-weight: 800; margin-bottom: 8px;">БудМаркет — Радомишль</p>
+  <p style="color: var(--muted); font-size: 14px; margin-bottom: 12px;">вул. Міськради • +380988966988</p>
+  <p style="font-size: 12px; color: var(--muted);">© 2026 Всі права захищені</p>
 </footer>
 
 <script src="config.js"></script>

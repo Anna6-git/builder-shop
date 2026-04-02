@@ -1463,12 +1463,12 @@ body.miniModalOpen {
 ========================= */
 .callFabWrap {
   position: fixed !important;
-  left: 20px !important;
-  bottom: 20px !important;
-  z-index: 1300 !important;
-  display: flex;
-  flex-direction: column-reverse;
-  align-items: flex-start;
+  left: 20px !important;  /* Відступ від лівого краю */
+  bottom: 20px !important; /* Відступ від низу */
+  z-index: 9999 !important; /* Щоб була поверх усього контенту */
+  display: flex !important;
+  flex-direction: column-reverse !important; /* Меню буде рости вгору */
+  align-items: flex-start !important;
   gap: 10px;
 }
 
@@ -2162,4 +2162,22 @@ body:has(.productPage) .callFabWrap {
 
 #relatedPickerResults .adminRow img {
   display: none !important;
+}
+
+/* Щоб каталог не ховався за футером */
+.page {
+  min-height: 60vh;
+  padding-bottom: 100px;
+}
+
+/* Правильне приховування меню кнопки */
+.callFabMenu[hidden] {
+  display: none !important;
+}
+
+/* Щоб футер завжди був знизу і не заважав товарам */
+.siteFooter {
+  position: relative;
+  z-index: 10;
+  width: 100%;
 }

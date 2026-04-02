@@ -2005,33 +2005,22 @@ async function saveHomeInfoCardsToBackend() {
   if (productsSection) productsSection.hidden = true;
 })();
 
-/* =========================
-   КНОПКА ЗВ'ЯЗКУ (FAB)
-========================= */
-document.addEventListener("DOMContentLoaded", () => {
-  const callFabBtn = document.getElementById('callFabBtn');
-  const callFabMenu = document.getElementById('callFabMenu');
-
-  if (callFabBtn && callFabMenu) {
-    // Відкрити/закрити при кліку на саму кнопку
-    callFabBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const isHidden = callFabMenu.hasAttribute('hidden');
-      if (isHidden) {
-        callFabMenu.removeAttribute('hidden');
-        callFabBtn.classList.add('active'); // Можна додати для анімації повороту іконки
-      } else {
-        callFabMenu.setAttribute('hidden', '');
-        callFabBtn.classList.remove('active');
-      }
-    });
-
-    // Закрити, якщо клікнули мимо меню
-    document.addEventListener('click', (e) => {
-      if (!callFabMenu.contains(e.target) && e.target !== callFabBtn) {
-        callFabMenu.setAttribute('hidden', '');
-        callFabBtn.classList.remove('active');
-      }
-    });
+// Додаємо в самому кінці файлу
+window.addEventListener('DOMContentLoaded', () => {
+  try {
+    const fabBtn = document.querySelector('#callFabBtn');
+    const fabMenu = document.querySelector('#callFabMenu');
+    
+    if (fabBtn && fabMenu) {
+      fabBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        fabMenu.hidden = !fabMenu.hidden;
+      });
+      document.addEventListener('click', () => {
+        fabMenu.hidden = true;
+      });
+    }
+  } catch (err) {
+    console.error("FAB Error:", err);
   }
 });
