@@ -75,14 +75,15 @@ app.use((err, _req, res, _next) => {
 });
 
 /* -------------------- START SERVER -------------------- */
-// Віддаємо статичні файли (index.html, стилі, картинки)
-app.use(express.static(__dirname));
+const path = require('path'); // Переконайся, що цей рядок є на самому початку файлу!
 
-// Головний маршрут для сайту
+// Вказуємо статичні файли (стилі, картинки, скрипти)
+app.use(express.static(path.join(__dirname)));
+
+// Головна сторінка
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
+    res.sendFile(path.resolve(__dirname, 'index.html'));
 });
-
 
 initDb()
   .then(() => {
