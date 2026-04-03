@@ -75,10 +75,7 @@ app.use((err, _req, res, _next) => {
 });
 
 /* -------------------- START SERVER -------------------- */
-const path = require('path'); // Переконайся, що цей рядок є на самому початку файлу!
 
-// Вказуємо статичні файли (стилі, картинки, скрипти)
-app.use(express.static(path.join(__dirname)));
 
 // Головна сторінка
 app.get('/', (req, res) => {
