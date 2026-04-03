@@ -75,6 +75,14 @@ app.use((err, _req, res, _next) => {
 });
 
 /* -------------------- START SERVER -------------------- */
+// Віддаємо статичні файли (index.html, стилі, картинки)
+app.use(express.static(__dirname));
+
+// Головний маршрут для сайту
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
+
 
 initDb()
   .then(() => {
