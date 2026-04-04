@@ -1,7 +1,5 @@
 "use strict";
 
-const cors = require('cors'); // <- Додай цей рядок
-// ... інші імпорти
 const path = require("path");
 require("dotenv").config({ path: path.join(__dirname, ".env") });
 
@@ -27,10 +25,12 @@ const PORT = Number(process.env.PORT) || 3001;
 
 const devOriginRegex = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
 
-const extraOrigins = String(process.env.FRONTEND_ORIGINS || "")
-  .split(",")
-  .map((s) => s.trim())
-  .filter(Boolean);
+// Вписуємо твої домени напряму
+const extraOrigins = [
+  "https://bydmarket.com.ua",
+  "https://www.bydmarket.com.ua",
+  "https://anna6-git.github.io"
+];
 
 app.use(
   cors({
@@ -52,19 +52,6 @@ app.options(/.*/, cors());
 
 app.use(express.json({ limit: "10mb" }));
 const uploadsPath = path.join(process.env.RAILWAY_VOLUME_MOUNT_PATH || "/data", "uploads");
-const corsOptions = {
-  origin: [
-    'https://bydmarket.com.ua', 
-    'https://www.bydmarket.com.ua',
-    'https://anna6-git.github.io', 
-    'http://localhost:3000',
-    'http://127.0.0.1:3000'
-  ],
-  methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
-  credentials: true
-};
-
-app.use(cors(corsOptions));
 app.use("/uploads", express.static(uploadsPath));
 
 /* -------------------- HEALTH -------------------- */
@@ -90,7 +77,6 @@ app.use((err, _req, res, _next) => {
 });
 
 /* -------------------- START SERVER -------------------- */
-
 
 // Головна сторінка
 app.get('/', (req, res) => {
