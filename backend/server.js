@@ -1,5 +1,8 @@
 "use strict";
 
+const express = require('express');
+const cors = require('cors'); // <- Додай цей рядок
+// ... інші імпорти
 const path = require("path");
 require("dotenv").config({ path: path.join(__dirname, ".env") });
 
@@ -50,6 +53,19 @@ app.options(/.*/, cors());
 
 app.use(express.json({ limit: "10mb" }));
 const uploadsPath = path.join(process.env.RAILWAY_VOLUME_MOUNT_PATH || "/data", "uploads");
+const corsOptions = {
+  origin: [
+    'https://bydmarket.com.ua', 
+    'https://www.bydmarket.com.ua',
+    'https://anna6-git.github.io', 
+    'http://localhost:3000',
+    'http://127.0.0.1:3000'
+  ],
+  methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+  credentials: true
+};
+
+app.use(cors(corsOptions));
 app.use("/uploads", express.static(uploadsPath));
 
 /* -------------------- HEALTH -------------------- */
