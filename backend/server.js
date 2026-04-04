@@ -1,6 +1,5 @@
 "use strict";
 
-const express = require('express');
 const cors = require('cors'); // <- Додай цей рядок
 // ... інші імпорти
 const path = require("path");
