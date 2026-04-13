@@ -696,21 +696,22 @@ body.drawerOpen .drawer {
   transform: translateY(-50%);
   width: 42px;
   height: 42px;
-  border: 1px solid rgba(255, 255, 255, 0.28);
-  background: rgba(255, 255, 255, 0.92);
-  color: #111827;
+  border: none;
+  background: transparent;
+  color: #ffffff;
   font-size: 28px;
   font-weight: 700;
   z-index: 3;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.2s ease, transform 0.2s ease;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.55);
+  transition: transform 0.2s ease, opacity 0.2s ease;
 }
 
 .nav:hover,
 .nav:active {
-  background: #ffffff;
+  background: transparent;
   transform: translateY(-50%) scale(1.04);
 }
 
